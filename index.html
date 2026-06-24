@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reactable Wall</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; }
+
+    /* Canvas stack — all full-screen, pointer-events off so clicks reach body */
+    #debug-canvas { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; }
+    #vis-canvas   { position: fixed; top: 0; left: 0; z-index: 2; pointer-events: none; }
+    #calib-canvas { position: fixed; top: 0; left: 0; z-index: 3; pointer-events: none; }
+
+    /* Start banner — removed after first click (required for AudioContext resume) */
+    #start-banner {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.85);
+    }
+    #start-banner h1 {
+      color: #fff; font: bold 28px monospace; letter-spacing: 2px;
+    }
+    #start-banner p {
+      color: #888; font: 13px monospace; text-align: center; max-width: 400px; line-height: 1.6;
+    }
+    #start-btn {
+      font: bold 18px monospace; padding: 14px 40px;
+      background: #1a7a4a; color: #fff;
+      border: none; border-radius: 6px; cursor: pointer; letter-spacing: 1px;
+    }
+    #start-btn:hover { background: #29a862; }
+
+    /* Help hint — bottom center, fades in after start */
+    #key-hints {
+      position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+      color: rgba(255,255,255,0.25); font: 11px monospace;
+      pointer-events: none; z-index: 10; white-space: nowrap;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="debug-canvas"></canvas>
+  <canvas id="vis-canvas"></canvas>
+  <canvas id="calib-canvas"></canvas>
+
+  <div id="start-banner">
+    <h1>REACTABLE WALL</h1>
+    <p>Place a puck with ID 0 (Oscillator) on your wall or desk.<br>
+       Turn it to bend the pitch. Add ID 5 (Output) to control volume.</p>
+    <button id="start-btn">TAP TO START</button>
+  </div>
+
+  <div id="key-hints">M: toggle markers &nbsp;|&nbsp; [ ]: marker size &nbsp;|&nbsp; C: calibration &nbsp;|&nbsp; W: webcam</div>
+
+  <!-- Tone.js audio engine -->
+  <script src="https://cdn.jsdelivr.net/npm/tone/build/Tone.js"></script>
+  <!-- ArUco marker detection (js-aruco2) -->
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/cv.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/aruco.js"></script>
+  <!-- Ported from Gizmo Factory — do not modify without updating both projects -->
+  <script src="src/aruco-4x4-dict.js"></script>
+  <script src="src/calib-overlay.js"></script>
+  <script src="src/calibration.js"></script>
+  <!-- New for Reactable Wall -->
+  <script src="src/utils/angleSmoothing.js"></script>
+  <script src="src/services/moduleRegistry.js"></script>
+  <script src="src/services/audioEngine.js"></script>
+  <script src="src/components/visualEngine.js"></script>
+  <!-- Starts webcam automatically on load -->
+  <script src="src/services/tracking.js"></script>
+
+  <script>
+    // W and H are `let` (not const) so calibration.js and visualEngine can
+    // always read the current window size via bare name lookup.
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+
+    const debugCanvas = document.getElementById('debug-canvas');
+    const visCanvas   = document.getElementById('vis-canvas');
+    const calibCanvas = document.getElementById('calib-canvas');
+
+    function resizeAll() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      debugCanvas.width = visCanvas.width = calibCanvas.width = W;
+      debugCanvas.height = visCanvas.height = calibCanvas.height = H;
+      window.drawCalibOverlay();
+    }
+    resizeAll();
+
+    // Initialise the projected corner-marker overlay (uses the calib canvas)
+    window.initCalibOverlay(calibCanvas);
+
+    window.addEventListener('resize', resizeAll);
+
+    // Default pass-through: camera coords → screen coords with no warp.
+    // overrideCameraToScreen() (in calibration.js) replaces this once calibrated.
+    window.cameraToScreen = function(p) {
+      return { x: p.x * W, y: p.y * H };
+    };
+
+    // Wire up the visual engine to both canvases
+    visualEngine.init(visCanvas, debugCanvas);
+
+    // Each detection frame: update audio modules and redraw visuals
+    window.onMarkersDetected = function(detected) {
+      reconcileModules(detected);
+      visualEngine.draw(detected);
+    };
+
+    // Start button — resumes the AudioContext (browser requires a user gesture)
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      await initAudio();
+      document.getElementById('start-banner').remove();
+      document.getElementById('key-hints').style.display = 'block';
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.ctrlKey || e.metaKey) return;
+
+      switch (e.key.toLowerCase()) {
+        // M — toggle projected calibration markers
+        case 'm':
+          window.showCalibMarkers = !window.showCalibMarkers;
+          localStorage.setItem('showCalibMarkers', window.showCalibMarkers ? '1' : '0');
+          window.drawCalibOverlay();
+          break;
+
+        // [ / ] — shrink / grow projected markers
+        case '[':
+        case ']': {
+          const step = e.key === ']' ? 0.02 : -0.02;
+          const next = Math.max(0.05, Math.min(0.45, window.CALIB_TILE_FRAC + step));
+          window.CALIB_TILE_FRAC = Math.round(next * 100) / 100;
+          localStorage.setItem('calibTileFrac', String(window.CALIB_TILE_FRAC));
+          window.recomputeCalibAnchors();
+          window.drawCalibOverlay();
+          break;
+        }
+
+        // C — trigger manual calibration (click 4 webcam corners then 4 canvas corners)
+        case 'c':
+          window.startCalibration();
+          break;
+
+        // W — toggle webcam preview on/off
+        case 'w':
+          window.toggleWebcam();
+          break;
+      }
+    });
+  </script>
+</body>
+</html>

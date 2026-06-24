@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reactable Wall — Print Markers</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #fff; font: 14px monospace; color: #222; padding: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    p  { color: #555; margin-bottom: 20px; font-size: 12px; line-height: 1.6; }
+    .grid { display: flex; flex-wrap: wrap; gap: 32px; }
+    .card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .card label { font-size: 13px; font-weight: bold; color: #333; }
+    .card svg { border: 2px solid #000; }
+    .card .info { font-size: 11px; color: #666; text-align: center; }
+    .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
+    button {
+      background: #1a1a2e; color: #fff; border: none;
+      padding: 8px 20px; cursor: pointer; font: 13px monospace; border-radius: 3px;
+    }
+    button:hover { background: #2a2a4e; }
+    label[for] { font-size: 13px; }
+    input[type=number] {
+      width: 60px; padding: 4px 6px; font: 13px monospace; border: 1px solid #aaa;
+    }
+    .card-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #555; cursor: pointer; }
+    .card-check input { cursor: pointer; width: 15px; height: 15px; }
+    .card.excluded { opacity: 0.3; }
+    .section-heading {
+      width: 100%; font: bold 14px monospace; color: #333;
+      border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 4px;
+    }
+    .section-heading + .section-heading { margin-top: 16px; }
+    @media print {
+      .controls, h1, p, .card-check, .section-heading { display: none; }
+      .grid { gap: 48px; }
+      .card.excluded { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Reactable Wall — Marker Print Page</h1>
+  <p>
+    Dictionary: <strong>ARUCO_4X4_50</strong> — must match <code>tracking.js</code>.<br>
+    Print at <strong>10 cm+</strong> per marker for reliable detection at arm's length.<br>
+    <strong>Corner markers (10, 11, 13, 18)</strong> are projected by the app when running
+    with a projector — only print these for non-projector use.<br>
+    <strong>Puck markers (0, 5)</strong> go on your physical pucks or taped to paper.
+  </p>
+
+  <div class="controls">
+    <label for="sizeInput">Size (px):</label>
+    <input type="number" id="sizeInput" value="200" min="80" max="800" step="10">
+    <button onclick="renderMarkers()">Regenerate</button>
+    <button onclick="window.print()">Print</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/cv.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/aruco.js"></script>
+  <script src="src/aruco-4x4-dict.js"></script>
+  <script>
+    const MARKER_DICT = 'ARUCO_4X4_50';
+
+    // Puck markers — the audio modules
+    const PUCK_IDS = [0, 5];
+    const PUCK_LABELS = {
+      0: 'Oscillator — turn to change pitch (C3–C6)',
+      5: 'Output / Master — turn to set volume',
+    };
+
+    // Calibration corner markers — projected by the app, only print for non-projector
+    const CALIB_IDS = [10, 11, 18, 13];
+    const CALIB_LABELS = {
+      10: 'TOP-LEFT corner',
+      11: 'TOP-RIGHT corner',
+      18: 'BOTTOM-RIGHT corner',
+      13: 'BOTTOM-LEFT corner',
+    };
+
+    function makeCard(id, label, info, size, dict) {
+      const svgStr = dict.generateSVG(id);
+      const card   = document.createElement('div');
+      card.className = 'card';
+
+      const lbl = document.createElement('label');
+      lbl.textContent = `ID ${id} — ${label}`;
+
+      const svgWrap = document.createElement('div');
+      svgWrap.innerHTML = svgStr;
+      const svgEl = svgWrap.querySelector('svg');
+      if (svgEl) {
+        svgEl.setAttribute('width', size);
+        svgEl.setAttribute('height', size);
+      }
+
+      const infoEl = document.createElement('div');
+      infoEl.className = 'info';
+      infoEl.textContent = info;
+
+      const checkLabel = document.createElement('label');
+      checkLabel.className = 'card-check';
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = true;
+      chk.addEventListener('change', () => card.classList.toggle('excluded', !chk.checked));
+      checkLabel.appendChild(chk);
+      checkLabel.appendChild(document.createTextNode('Include in print'));
+
+      card.appendChild(lbl);
+      card.appendChild(svgWrap);
+      card.appendChild(infoEl);
+      card.appendChild(checkLabel);
+      return card;
+    }
+
+    function sectionHeading(text) {
+      const el = document.createElement('div');
+      el.className    = 'section-heading';
+      el.style.width  = '100%';
+      el.textContent  = text;
+      return el;
+    }
+
+    function renderMarkers() {
+      const size = parseInt(document.getElementById('sizeInput').value, 10) || 200;
+      const dict = new AR.Dictionary(MARKER_DICT);
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+
+      // ── Puck markers ──────────────────────────────────────────────────────
+      grid.appendChild(sectionHeading('Puck markers — attach to your physical pucks'));
+
+      PUCK_IDS.forEach(id => {
+        const card = makeCard(id, PUCK_LABELS[id] || '', `${MARKER_DICT} · ID ${id}`, size, dict);
+        grid.appendChild(card);
+      });
+
+      // ── Calibration corners ────────────────────────────────────────────────
+      grid.appendChild(sectionHeading(
+        'Calibration corners — tape to the 4 corners of your wall / play area (projector-less setup only)'
+      ));
+
+      CALIB_IDS.forEach(id => {
+        const card = makeCard(id, CALIB_LABELS[id], `${MARKER_DICT} · ID ${id} · calibration`, size, dict);
+        card.style.cssText += 'background:#f0f8ff;padding:8px;border-radius:4px;border:2px solid #4af;';
+        grid.appendChild(card);
+      });
+    }
+
+    renderMarkers();
+  </script>
+</body>
+</html>
