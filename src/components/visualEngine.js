@@ -11,8 +11,8 @@ const visualEngine = (() => {
   }
 
   // detectedWorldMarkers: [{id, wx, wy, angle, screenCorners}]
-  // patchEdges: [{fromPos, toPos, connected, alpha}] — optional
-  function draw(detectedWorldMarkers, patchEdges) {
+  // edges: [{fromPos, toPos, kind:'audio'|'control', connected, alpha}] — optional
+  function draw(detectedWorldMarkers, edges) {
     if (!visCtx || !debugCtx) return;
 
     const W = visCtx.canvas.width;
@@ -21,9 +21,9 @@ const visualEngine = (() => {
     visCtx.clearRect(0, 0, W, H);
     debugCtx.clearRect(0, 0, W, H);
 
-    // Draw patch edges beneath module rings so rings appear on top
-    if (patchEdges && patchEdges.length > 0) {
-      _drawPatchEdges(patchEdges);
+    // Draw edges beneath module rings so rings appear on top
+    if (edges && edges.length > 0) {
+      _drawEdges(edges);
     }
 
     // Index active modules by id for quick lookup
@@ -89,6 +89,26 @@ const visualEngine = (() => {
       visCtx.restore();
     });
 
+    // Tonality HUD pill (top-right) when a Tonality puck is present
+    const tonMod = getActiveModules().find(m => m.def.subtype === 'tonality');
+    if (tonMod) {
+      const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const root = tonMod.def.getRoot(tonMod.angle);
+      visCtx.save();
+      visCtx.fillStyle   = 'rgba(12,26,24,0.85)';
+      visCtx.strokeStyle = '#1f4a44';
+      const px = W - 360, py = 24;
+      visCtx.beginPath();
+      if (visCtx.roundRect) visCtx.roundRect(px, py, 336, 34, 17); else visCtx.rect(px, py, 336, 34);
+      visCtx.fill();
+      visCtx.stroke();
+      visCtx.fillStyle = '#6ee7d6';
+      visCtx.font      = '14px monospace';
+      visCtx.textAlign = 'left';
+      visCtx.fillText(`♪ ${NAMES[root]} minor pentatonic`, px + 18, py + 22);
+      visCtx.restore();
+    }
+
     _drawDebugOverlay(detectedWorldMarkers, W, H);
   }
 
@@ -150,10 +170,20 @@ const visualEngine = (() => {
       patchColor = connected ? '#44ffaa' : approaching ? '#ffcc44' : '#ff6644';
     }
 
-    // Status bars at bottom-left (patch line added at -76)
+    // Routing summary line (effect/controller counts; full chain logged to console)
+    const effCount  = active.filter(m => m.def.type === 'effect').length;
+    const ctrlCount = active.filter(m => m.def.type === 'controller').length;
+    const routeText = `Modules: ${effCount} effect(s), ${ctrlCount} controller(s) — see console for live chain`;
+
+    // Status bars at bottom-left (routing line at -100, patch line at -76)
     debugCtx.save();
     debugCtx.font      = '12px monospace';
     debugCtx.textAlign = 'left';
+
+    debugCtx.fillStyle = 'rgba(0,0,0,0.65)';
+    debugCtx.fillRect(8, H - 100, Math.min(W - 16, 700), 20);
+    debugCtx.fillStyle = '#99aadd';
+    debugCtx.fillText(routeText, 14, H - 86);
 
     debugCtx.fillStyle = 'rgba(0,0,0,0.65)';
     debugCtx.fillRect(8, H - 76, Math.min(W - 16, 700), 20);
@@ -209,19 +239,28 @@ const visualEngine = (() => {
     debugCtx.restore();
   }
 
-  // edges: [{fromPos, toPos, connected, alpha}]
-  function _drawPatchEdges(edges) {
+  // edges: [{fromPos, toPos, kind:'audio'|'control', connected, alpha}]
+  // 'audio' = green glowing cable; 'control' = purple dotted modulation link.
+  function _drawEdges(edges) {
     edges.forEach(edge => {
-      const { fromPos, toPos, connected, alpha } = edge;
+      const { fromPos, toPos, kind, connected, alpha } = edge;
 
       visCtx.save();
-      visCtx.globalAlpha = alpha * (connected ? 0.9 : 0.35);
-      visCtx.strokeStyle = connected ? '#88ffcc' : '#aaaaff';
-      visCtx.lineWidth   = connected ? 2 : 1;
-      visCtx.shadowColor = connected ? '#44ffaa' : '#8888ff';
-      visCtx.shadowBlur  = connected ? 16 : 6;
-
-      if (!connected) visCtx.setLineDash([8, 8]);
+      if (kind === 'control') {
+        visCtx.globalAlpha = alpha * 0.9;
+        visCtx.strokeStyle = '#c98bff';
+        visCtx.lineWidth   = 2;
+        visCtx.shadowColor = '#c98bff';
+        visCtx.shadowBlur  = 12;
+        visCtx.setLineDash([3, 9]);
+      } else {
+        visCtx.globalAlpha = alpha * (connected ? 0.9 : 0.35);
+        visCtx.strokeStyle = connected ? '#88ffcc' : '#aaaaff';
+        visCtx.lineWidth   = connected ? 2 : 1;
+        visCtx.shadowColor = connected ? '#44ffaa' : '#8888ff';
+        visCtx.shadowBlur  = connected ? 16 : 6;
+        if (!connected) visCtx.setLineDash([8, 8]);
+      }
 
       visCtx.beginPath();
       visCtx.moveTo(fromPos.x, fromPos.y);
@@ -232,7 +271,7 @@ const visualEngine = (() => {
       if (connected) {
         const mx = (fromPos.x + toPos.x) / 2;
         const my = (fromPos.y + toPos.y) / 2;
-        visCtx.fillStyle  = '#88ffcc';
+        visCtx.fillStyle  = kind === 'control' ? '#e0b3ff' : '#88ffcc';
         visCtx.shadowBlur = 20;
         visCtx.beginPath();
         visCtx.arc(mx, my, 4, 0, 2 * Math.PI);
