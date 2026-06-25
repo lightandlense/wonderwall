@@ -119,6 +119,28 @@ function reconcileModules(markers) {
   });
 }
 
+// Reroutes an oscillator's Tone node.
+// outputId = null → reconnect directly to Destination (bypasses Output puck).
+// outputId = id   → route through that Output module's Volume node.
+function rerouteOscillator(oscId, outputId) {
+  const oscMod = activeModules[oscId];
+  if (!oscMod || oscMod.def.type !== 'oscillator' || !oscMod.node) return;
+
+  try { oscMod.node.disconnect(); } catch (_) {}
+
+  if (outputId !== null && outputId !== undefined) {
+    const outMod = activeModules[outputId];
+    if (outMod && outMod.node) {
+      oscMod.node.connect(outMod.node);
+      console.log(`[audio] patched osc ${oscId} → output ${outputId}`);
+      return;
+    }
+  }
+
+  oscMod.node.toDestination();
+  console.log(`[audio] unpatched osc ${oscId} → destination`);
+}
+
 // Returns smoothed angle [0, 2π) for a module, or null if not active.
 function getModuleParam(id) {
   const m = activeModules[id];
@@ -136,7 +158,8 @@ function getActiveModules() {
   }));
 }
 
-window.initAudio         = initAudio;
-window.reconcileModules  = reconcileModules;
-window.getModuleParam    = getModuleParam;
-window.getActiveModules  = getActiveModules;
+window.initAudio          = initAudio;
+window.reconcileModules   = reconcileModules;
+window.getModuleParam     = getModuleParam;
+window.getActiveModules   = getActiveModules;
+window.rerouteOscillator  = rerouteOscillator;

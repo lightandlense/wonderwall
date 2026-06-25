@@ -52,7 +52,7 @@
   <div id="start-banner">
     <h1>REACTABLE WALL</h1>
     <p>Place a puck with ID 0 (Oscillator) on your wall or desk.<br>
-       Turn it to bend the pitch. Add ID 5 (Output) to control volume.</p>
+       Turn it to bend the pitch. Add ID 3 (Output) to control volume.</p>
     <button id="start-btn">TAP TO START</button>
   </div>
 
@@ -72,6 +72,7 @@
   <script src="src/services/moduleRegistry.js"></script>
   <script src="src/services/audioEngine.js"></script>
   <script src="src/components/visualEngine.js"></script>
+  <script src="src/services/patchGraph.js"></script>
   <!-- Starts webcam automatically on load -->
   <script src="src/services/tracking.js"></script>
 
@@ -108,10 +109,13 @@
     // Wire up the visual engine to both canvases
     visualEngine.init(visCanvas, debugCanvas);
 
-    // Each detection frame: update audio modules and redraw visuals
+    // Each detection frame: update audio, reconcile patches, redraw visuals
     window.onMarkersDetected = function(detected) {
       reconcileModules(detected);
-      visualEngine.draw(detected);
+      const active = getActiveModules();
+      patchGraph.reconcilePatches(active);
+      const edges = patchGraph.getPatchEdges(active);
+      visualEngine.draw(detected, edges);
     };
 
     // Start button — resumes the AudioContext (browser requires a user gesture)

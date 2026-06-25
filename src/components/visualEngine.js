@@ -11,7 +11,8 @@ const visualEngine = (() => {
   }
 
   // detectedWorldMarkers: [{id, wx, wy, angle, screenCorners}]
-  function draw(detectedWorldMarkers) {
+  // patchEdges: [{fromPos, toPos, connected, alpha}] — optional
+  function draw(detectedWorldMarkers, patchEdges) {
     if (!visCtx || !debugCtx) return;
 
     const W = visCtx.canvas.width;
@@ -19,6 +20,11 @@ const visualEngine = (() => {
 
     visCtx.clearRect(0, 0, W, H);
     debugCtx.clearRect(0, 0, W, H);
+
+    // Draw patch edges beneath module rings so rings appear on top
+    if (patchEdges && patchEdges.length > 0) {
+      _drawPatchEdges(patchEdges);
+    }
 
     // Index active modules by id for quick lookup
     const activeById = {};
@@ -46,7 +52,11 @@ const visualEngine = (() => {
       visCtx.stroke();
       visCtx.restore();
 
-      // Param arc — sweeps clockwise from top (−π/2) by the smoothed angle
+      // Use the module's mapped [0,1] value for display — avoids the 0/2π wrap
+      // discontinuity that raw angle produces when the topmost edge flips at ~45°.
+      const paramT = def.getParamT ? def.getParamT(angle) : angle / (2 * Math.PI);
+
+      // Param arc — sweeps clockwise from top (−π/2) by paramT of a full circle
       visCtx.save();
       visCtx.strokeStyle  = def.color;
       visCtx.lineWidth    = 6;
@@ -55,7 +65,7 @@ const visualEngine = (() => {
       visCtx.shadowColor  = def.color;
       visCtx.shadowBlur   = 12;
       visCtx.beginPath();
-      visCtx.arc(wx, wy, ringR + 9, -Math.PI / 2, -Math.PI / 2 + angle, false);
+      visCtx.arc(wx, wy, ringR + 9, -Math.PI / 2, -Math.PI / 2 + paramT * 2 * Math.PI, false);
       visCtx.stroke();
       visCtx.restore();
 
@@ -70,7 +80,7 @@ const visualEngine = (() => {
       visCtx.restore();
 
       // Param percentage below the ring
-      const paramPct = Math.round((angle / (2 * Math.PI)) * 100);
+      const paramPct = Math.round(paramT * 100);
       visCtx.save();
       visCtx.fillStyle = 'rgba(255,255,255,0.65)';
       visCtx.font      = '11px monospace';
@@ -117,10 +127,38 @@ const visualEngine = (() => {
       calibColor = '#ff6644';
     }
 
-    // Status bars at bottom-left
+    // Patch distance debug line
+    const active = getActiveModules();
+    const oscs   = active.filter(m => m.def.type === 'oscillator');
+    const outs   = active.filter(m => m.def.type === 'output');
+    let patchText, patchColor;
+    if (oscs.length === 0 || outs.length === 0) {
+      patchText  = `Patch: waiting — active mods: ${active.map(m => `ID${m.id}(${m.def.type})`).join(', ') || 'none'}`;
+      patchColor = '#888888';
+    } else {
+      let minDist = Infinity;
+      oscs.forEach(o => outs.forEach(u => {
+        const d = Math.sqrt((o.wx - u.wx) ** 2 + (o.wy - u.wy) ** 2);
+        if (d < minDist) minDist = d;
+      }));
+      const _pr = window.innerWidth * 0.35;
+      const connected  = minDist < _pr;
+      const approaching = minDist < _pr * 1.5;
+      const pr = Math.round(window.innerWidth * 0.35);
+      const ar = Math.round(pr * 1.5);
+      patchText  = `Patch: dist=${Math.round(minDist)}px — ${connected ? 'CONNECTED' : approaching ? `approaching (need <${pr})` : `far (need <${ar} for preview)`}`;
+      patchColor = connected ? '#44ffaa' : approaching ? '#ffcc44' : '#ff6644';
+    }
+
+    // Status bars at bottom-left (patch line added at -76)
     debugCtx.save();
     debugCtx.font      = '12px monospace';
     debugCtx.textAlign = 'left';
+
+    debugCtx.fillStyle = 'rgba(0,0,0,0.65)';
+    debugCtx.fillRect(8, H - 76, Math.min(W - 16, 700), 20);
+    debugCtx.fillStyle = patchColor;
+    debugCtx.fillText(patchText, 14, H - 62);
 
     debugCtx.fillStyle = 'rgba(0,0,0,0.65)';
     debugCtx.fillRect(8, H - 52, Math.min(W - 16, 640), 20);
@@ -169,6 +207,40 @@ const visualEngine = (() => {
       debugCtx.fillText(`ID ${m.id}`, m.wx + 12, m.wy - 8);
     });
     debugCtx.restore();
+  }
+
+  // edges: [{fromPos, toPos, connected, alpha}]
+  function _drawPatchEdges(edges) {
+    edges.forEach(edge => {
+      const { fromPos, toPos, connected, alpha } = edge;
+
+      visCtx.save();
+      visCtx.globalAlpha = alpha * (connected ? 0.9 : 0.35);
+      visCtx.strokeStyle = connected ? '#88ffcc' : '#aaaaff';
+      visCtx.lineWidth   = connected ? 2 : 1;
+      visCtx.shadowColor = connected ? '#44ffaa' : '#8888ff';
+      visCtx.shadowBlur  = connected ? 16 : 6;
+
+      if (!connected) visCtx.setLineDash([8, 8]);
+
+      visCtx.beginPath();
+      visCtx.moveTo(fromPos.x, fromPos.y);
+      visCtx.lineTo(toPos.x, toPos.y);
+      visCtx.stroke();
+
+      // Midpoint glow dot on active connections
+      if (connected) {
+        const mx = (fromPos.x + toPos.x) / 2;
+        const my = (fromPos.y + toPos.y) / 2;
+        visCtx.fillStyle  = '#88ffcc';
+        visCtx.shadowBlur = 20;
+        visCtx.beginPath();
+        visCtx.arc(mx, my, 4, 0, 2 * Math.PI);
+        visCtx.fill();
+      }
+
+      visCtx.restore();
+    });
   }
 
   return { init, draw };
