@@ -11,6 +11,20 @@ const activeModules = {};
 
 let audioInitialized = false;
 
+// Global tonality state, set by applyRoutingPlan from the routing plan.
+let _tonality = null; // { active, root, scale } | null
+const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
+
+// Oscillator frequency with optional scale quantization.
+function _oscFreq(def, angle) {
+  const f = def.getFreq(angle);
+  if (_tonality && _tonality.active) return _tonalityUtil.quantizeFreqToScale(f, _tonality.root);
+  return f;
+}
+
+// Set of module ids currently driven by an LFO (skip direct param ramp for them).
+let _lfoTargets = new Set();
+
 // Must be called once from a user gesture (click) to resume the AudioContext.
 async function initAudio() {
   if (audioInitialized) return;
@@ -29,18 +43,21 @@ function _addModule(id, marker) {
   let node = null;
 
   if (def.type === 'oscillator') {
-    const freq = def.getFreq(smoother.get());
     const synth = new Tone.Synth({
       oscillator: { type: 'sine' },
       envelope: { attack: 0.1, decay: 0, sustain: 1, release: 0.3 },
-    }).toDestination();
-    synth.triggerAttack(freq);
-    node = synth;
+    });
+    synth.triggerAttack(_oscFreq(def, smoother.get()));
+    node = synth; // routing connects it; starts disconnected (silent until patched)
   } else if (def.type === 'output') {
-    // Phase 1: output module controls master volume via a Tone.Volume node.
-    // In Phase 2 the patch graph will route oscillators through it.
-    const vol = new Tone.Volume(def.getVolDb(smoother.get())).toDestination();
-    node = vol;
+    node = new Tone.Volume(def.getVolDb(smoother.get())).toDestination();
+  } else if (def.type === 'effect') {
+    node = def.makeNode();          // created disconnected; routing inserts it
+    def.applyParam(node, def.getParamT(smoother.get()));
+  } else if (def.type === 'controller' && def.subtype === 'lfo') {
+    node = new Tone.LFO(def.getRateHz(smoother.get()), 0, 1).start();
+  } else if (def.type === 'global') {
+    node = null;                    // tonality has no audio node
   }
 
   activeModules[id] = {
@@ -81,11 +98,16 @@ function _updateModule(id, marker) {
   const angle = m.smoother.get();
 
   if (m.def.type === 'oscillator' && m.node) {
-    const freq = m.def.getFreq(angle);
     // 50ms ramp — smooths pitch between detection frames without perceptible lag
-    m.node.frequency.rampTo(freq, 0.05);
+    m.node.frequency.rampTo(_oscFreq(m.def, angle), 0.05);
   } else if (m.def.type === 'output' && m.node) {
     m.node.volume.rampTo(m.def.getVolDb(angle), 0.05);
+  } else if (m.def.type === 'effect' && m.node && !_lfoTargets.has(m.def.id)) {
+    // While an LFO drives this effect, its rotation feeds the LFO window instead
+    // (handled in applyRoutingPlan), so skip the direct ramp to avoid fighting it.
+    m.def.applyParam(m.node, m.def.getParamT(angle));
+  } else if (m.def.type === 'controller' && m.node) {
+    m.node.frequency.rampTo(m.def.getRateHz(angle), 0.05);
   }
 }
 
@@ -119,26 +141,87 @@ function reconcileModules(markers) {
   });
 }
 
-// Reroutes an oscillator's Tone node.
-// outputId = null → reconnect directly to Destination (bypasses Output puck).
-// outputId = id   → route through that Output module's Volume node.
-function rerouteOscillator(oscId, outputId) {
-  const oscMod = activeModules[oscId];
-  if (!oscMod || oscMod.def.type !== 'oscillator' || !oscMod.node) return;
+let _lastChainKeys = {}; // genId -> last applied "a>b>c" string
+let _activeLinks = {};   // lfoId -> targetId currently connected
 
-  try { oscMod.node.disconnect(); } catch (_) {}
+// Map an effect/osc module to the Tone Param the LFO should modulate (option B).
+function _modTargetParam(mod) {
+  if (mod.def.type === 'oscillator') return mod.node.detune; // vibrato
+  return mod.node[mod.def.modParam];                         // filter.frequency / delay.feedback
+}
 
-  if (outputId !== null && outputId !== undefined) {
-    const outMod = activeModules[outputId];
-    if (outMod && outMod.node) {
-      oscMod.node.connect(outMod.node);
-      console.log(`[audio] patched osc ${oscId} → output ${outputId}`);
-      return;
-    }
+// Set the LFO's min/max window centered on the target's current rotation value.
+function _setLfoWindow(lfoMod, targetMod) {
+  const t = targetMod.def.getParamT(targetMod.smoother.get());
+  if (targetMod.def.type === 'oscillator') {
+    lfoMod.node.min = -30; lfoMod.node.max = 30;             // +-30 cents vibrato
+  } else if (targetMod.def.subtype === 'filter') {
+    const c = targetMod.def.centerValue(t);
+    lfoMod.node.min = c * 0.5; lfoMod.node.max = c * 2;       // +- octave around cutoff
+  } else if (targetMod.def.subtype === 'delay') {
+    const c = targetMod.def.centerValue(t);
+    lfoMod.node.min = Math.max(0, c - 0.2); lfoMod.node.max = Math.min(0.85, c + 0.2);
   }
+}
 
-  oscMod.node.toDestination();
-  console.log(`[audio] unpatched osc ${oscId} → destination`);
+// Execute a RoutingPlan: rewire only chains/links that changed; refresh LFO windows.
+function applyRoutingPlan(plan) {
+  if (!audioInitialized) return;
+  _tonality = plan.tonality;
+
+  // ---- audio chains ----
+  const seenGen = new Set();
+  plan.chains.forEach(chain => {
+    seenGen.add(chain.genId);
+    const key = chain.nodeIds.join('>');
+    if (_lastChainKeys[chain.genId] === key) return; // unchanged
+    _lastChainKeys[chain.genId] = key;
+
+    // Disconnect every node in the chain, then reconnect in series.
+    chain.nodeIds.forEach(id => { const m = activeModules[id]; if (m && m.node) { try { m.node.disconnect(); } catch (_) {} } });
+
+    if (!chain.outputId) return; // silent: leave generator disconnected
+
+    for (let i = 0; i < chain.nodeIds.length - 1; i++) {
+      const a = activeModules[chain.nodeIds[i]];
+      const b = activeModules[chain.nodeIds[i + 1]];
+      if (a && a.node && b && b.node) a.node.connect(b.node);
+    }
+    // output node already routes to Destination (created with .toDestination())
+    console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
+  });
+  // generators that vanished from the plan: drop their cached key
+  Object.keys(_lastChainKeys).forEach(g => { if (!seenGen.has(Number(g))) delete _lastChainKeys[g]; });
+
+  // ---- control links ----
+  const desired = {}; plan.controlLinks.forEach(l => { desired[l.lfoId] = l.targetId; });
+
+  // tear down links that changed/disappeared
+  Object.keys(_activeLinks).forEach(lfoIdStr => {
+    const lfoId = Number(lfoIdStr);
+    if (desired[lfoId] !== _activeLinks[lfoId]) {
+      const lfoMod = activeModules[lfoId];
+      if (lfoMod && lfoMod.node) { try { lfoMod.node.disconnect(); } catch (_) {} }
+      delete _activeLinks[lfoId];
+    }
+  });
+  // establish / refresh links
+  plan.controlLinks.forEach(l => {
+    const lfoMod = activeModules[l.lfoId];
+    const tgtMod = activeModules[l.targetId];
+    if (!lfoMod || !lfoMod.node || !tgtMod || !tgtMod.node) return;
+    if (_activeLinks[l.lfoId] !== l.targetId) {
+      _setLfoWindow(lfoMod, tgtMod);
+      try { lfoMod.node.connect(_modTargetParam(tgtMod)); } catch (_) {}
+      _activeLinks[l.lfoId] = l.targetId;
+      console.log(`[audio] LFO ${l.lfoId} -> module ${l.targetId}`);
+    } else {
+      _setLfoWindow(lfoMod, tgtMod); // keep window centered as the target is turned (option B, live)
+    }
+  });
+
+  // refresh the set of LFO-driven targets so _updateModule stops fighting the LFO
+  _lfoTargets = new Set(Object.values(_activeLinks));
 }
 
 // Returns smoothed angle [0, 2π) for a module, or null if not active.
@@ -162,4 +245,4 @@ window.initAudio          = initAudio;
 window.reconcileModules   = reconcileModules;
 window.getModuleParam     = getModuleParam;
 window.getActiveModules   = getActiveModules;
-window.rerouteOscillator  = rerouteOscillator;
+window.applyRoutingPlan   = applyRoutingPlan;
