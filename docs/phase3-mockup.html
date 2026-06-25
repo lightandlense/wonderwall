@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reactable Wall — Phase 3 Mockup</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #07080c; color: #e8ecf4;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: .3px; margin: 0 0 2px; }
+  .sub { color: #8a93a6; font-size: 13px; margin: 0 0 18px; }
+  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9;
+    background: radial-gradient(120% 120% at 50% 35%, #0e1016 0%, #07080c 70%);
+    border: 1px solid #1b1f2b; border-radius: 14px; overflow: hidden; }
+  svg { width: 100%; height: 100%; display: block; }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr));
+    gap: 10px 26px; margin-top: 20px; font-size: 13px; line-height: 1.5; }
+  .legend b { color: #fff; }
+  .swatch { display:inline-block; width:11px; height:11px; border-radius:50%;
+    margin-right:7px; vertical-align: middle; }
+  .dash { display:inline-block; width:22px; border-top:2px dashed #aab2ff;
+    margin-right:7px; vertical-align: middle; }
+  .ctrl { display:inline-block; width:22px; border-top:2px dotted #c98bff;
+    margin-right:7px; vertical-align: middle; }
+  .note { margin-top: 22px; font-size: 12.5px; color:#9aa3b6; line-height:1.6;
+    border-top:1px solid #1b1f2b; padding-top:16px; }
+  code { background:#13161f; padding:1px 5px; border-radius:4px; color:#cdd6ea; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Reactable Wall — Phase 3, as projected on the wall</h1>
+  <p class="sub">A full patch: oscillator → filter → delay → output, an LFO modulating the filter, and the Tonality puck snapping pitch to a scale. This is a mockup of the projected visuals, not a screenshot.</p>
+
+  <div class="stage">
+    <svg viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="6" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="softglow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="12" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <marker id="flow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <circle cx="3" cy="3" r="2.4" fill="#88ffcc"/>
+        </marker>
+      </defs>
+
+      <!-- ================= AUDIO CABLE: osc -> filter -> delay -> output ================= -->
+      <!-- segment osc->filter -->
+      <line x1="250" y1="470" x2="520" y2="360" stroke="#3df0a8" stroke-width="3"
+        filter="url(#glow)" opacity="0.92"/>
+      <!-- segment filter->delay -->
+      <line x1="520" y1="360" x2="800" y2="300" stroke="#3df0a8" stroke-width="3"
+        filter="url(#glow)" opacity="0.92"/>
+      <!-- segment delay->output -->
+      <line x1="800" y1="300" x2="1040" y2="430" stroke="#3df0a8" stroke-width="3"
+        filter="url(#glow)" opacity="0.92"/>
+      <!-- flow dots on the cable -->
+      <circle cx="385" cy="415" r="4" fill="#9affd9" filter="url(#glow)"/>
+      <circle cx="660" cy="330" r="4" fill="#9affd9" filter="url(#glow)"/>
+      <circle cx="920" cy="365" r="4" fill="#9affd9" filter="url(#glow)"/>
+
+      <!-- ================= CONTROL LINK: LFO -> filter (purple, distinct) ================= -->
+      <line x1="470" y1="600" x2="520" y2="360" stroke="#c98bff" stroke-width="2.5"
+        stroke-dasharray="3 9" filter="url(#glow)" opacity="0.9"/>
+      <circle cx="495" cy="480" r="3.5" fill="#e0b3ff" filter="url(#glow)"/>
+
+      <!-- ================= PUCKS ================= -->
+      <!-- Oscillator (ID 0) -->
+      <g filter="url(#softglow)">
+        <circle cx="250" cy="470" r="46" fill="none" stroke="#44aaff" stroke-width="3"/>
+        <!-- param arc -->
+        <path d="M 250 424 A 46 46 0 0 1 296 470" fill="none" stroke="#7ac6ff" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <text x="250" y="476" text-anchor="middle" fill="#cfe6ff" font-size="15" font-weight="600">OSC</text>
+      <text x="250" y="540" text-anchor="middle" fill="#8fb6d8" font-size="13">ID 0 · pitch · 62%</text>
+
+      <!-- Filter (ID 1) — sits ON the cable -->
+      <g filter="url(#softglow)">
+        <circle cx="520" cy="360" r="40" fill="none" stroke="#ff8a3d" stroke-width="3"/>
+        <path d="M 520 320 A 40 40 0 0 1 560 360" fill="none" stroke="#ffb37a" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <text x="520" y="365" text-anchor="middle" fill="#ffd9bd" font-size="14" font-weight="600">FILT</text>
+      <text x="520" y="423" text-anchor="middle" fill="#d8a98f" font-size="12.5">ID 1 · cutoff · 55%</text>
+
+      <!-- Delay (ID 2) — also on the cable -->
+      <g filter="url(#softglow)">
+        <circle cx="800" cy="300" r="40" fill="none" stroke="#ff5db4" stroke-width="3"/>
+        <path d="M 800 260 A 40 40 0 0 1 835 282" fill="none" stroke="#ff9ad3" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <text x="800" y="305" text-anchor="middle" fill="#ffd0ea" font-size="14" font-weight="600">DLY</text>
+      <text x="800" y="363" text-anchor="middle" fill="#d88fc0" font-size="12.5">ID 2 · feedback · 38%</text>
+
+      <!-- Output (ID 3) -->
+      <g filter="url(#softglow)">
+        <circle cx="1040" cy="430" r="46" fill="none" stroke="#ffcc44" stroke-width="3"/>
+        <path d="M 1040 384 A 46 46 0 0 1 1086 430" fill="none" stroke="#ffdd80" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <text x="1040" y="436" text-anchor="middle" fill="#fff0c2" font-size="15" font-weight="600">OUT</text>
+      <text x="1040" y="500" text-anchor="middle" fill="#d8c48f" font-size="13">ID 3 · volume · 80%</text>
+
+      <!-- LFO (ID 4) -->
+      <g filter="url(#softglow)">
+        <circle cx="470" cy="600" r="38" fill="none" stroke="#c98bff" stroke-width="3"/>
+        <path d="M 470 562 A 38 38 0 0 1 504 584" fill="none" stroke="#dcb3ff" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <text x="470" y="605" text-anchor="middle" fill="#ecd9ff" font-size="14" font-weight="600">LFO</text>
+      <text x="470" y="660" text-anchor="middle" fill="#bd9fd8" font-size="12.5">ID 4 · rate · 2.1 Hz</text>
+
+      <!-- Tonality (ID 5) — global, no cable -->
+      <g filter="url(#softglow)">
+        <circle cx="1080" cy="150" r="34" fill="none" stroke="#5de0d0" stroke-width="3" stroke-dasharray="4 5"/>
+      </g>
+      <text x="1080" y="155" text-anchor="middle" fill="#c2fff7" font-size="13" font-weight="600">TON</text>
+      <!-- tonality HUD pill -->
+      <rect x="905" y="196" width="350" height="34" rx="17" fill="#0c1a18" stroke="#1f4a44"/>
+      <text x="925" y="218" fill="#6ee7d6" font-size="14">&#9834; C minor pentatonic &#183; ID 5</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <div><span class="swatch" style="background:#44aaff"></span><b>Oscillator</b> — the sound source. Turn it to set pitch.</div>
+    <div><span class="swatch" style="background:#ff8a3d"></span><b>Filter</b> — spliced onto the cable. Turn it for cutoff.</div>
+    <div><span class="swatch" style="background:#ff5db4"></span><b>Delay</b> — next on the cable. Turn it for feedback.</div>
+    <div><span class="swatch" style="background:#ffcc44"></span><b>Output</b> — the speaker. Turn it for master volume.</div>
+    <div><span class="swatch" style="background:#c98bff"></span><b>LFO</b> — modulates the nearest puck (here, the filter).</div>
+    <div><span class="swatch" style="background:#5de0d0"></span><b>Tonality</b> — global; snaps pitch to a scale.</div>
+    <div><span style="display:inline-block;width:22px;border-top:3px solid #3df0a8;vertical-align:middle;margin-right:7px"></span><b>Audio cable</b> — green, glowing, flows toward Output.</div>
+    <div><span class="ctrl"></span><b>Control link</b> — purple, dotted; carries modulation, not sound.</div>
+  </div>
+
+  <div class="note">
+    <b>How you'd play this:</b> Place the <code>OSC</code> and <code>OUT</code> pucks on the wall — a green cable snaps between them and you hear a tone.
+    Drop the <code>FILT</code> puck <i>on that cable</i> and it splices into the chain (osc&nbsp;→&nbsp;filter&nbsp;→&nbsp;out); slide the <code>DLY</code> puck onto the cable too and it chains after the filter.
+    Where each effect sits along the line decides its order. Set the <code>LFO</code> puck near the filter and a purple control link forms — the filter's cutoff now wobbles at the LFO's rate (you chose <b>B</b>: the filter's own rotation still sets the center cutoff, the LFO sets how fast it wobbles).
+    The <code>TON</code> puck anywhere on the wall keeps the oscillator in key. Turning <i>any</i> puck shows its parameter as the bright arc around its ring.
+  </div>
+</div>
+</body>
+</html>
