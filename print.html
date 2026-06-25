@@ -45,7 +45,7 @@
     Print at <strong>10 cm+</strong> per marker for reliable detection at arm's length.<br>
     <strong>Corner markers (10, 11, 13, 18)</strong> are projected by the app when running
     with a projector — only print these for non-projector use.<br>
-    <strong>Puck markers (0, 3)</strong> go on your physical pucks or taped to paper.
+    <strong>Puck markers (0–5)</strong> go on your physical pucks or taped to paper.
   </p>
 
   <div class="controls">
@@ -64,10 +64,14 @@
     const MARKER_DICT = 'ARUCO_4X4_50';
 
     // Puck markers — the audio modules
-    const PUCK_IDS = [0, 3];
+    const PUCK_IDS = [0, 1, 2, 3, 4, 5];
     const PUCK_LABELS = {
-      0: 'Oscillator — turn to change pitch (C3–C6)',
-      3: 'Output / Master — turn to set volume',
+      0: 'Oscillator — turn for pitch (C3–C6)',
+      1: 'Filter — turn for cutoff; place on a cable',
+      2: 'Delay — turn for feedback; place on a cable',
+      3: 'Output / Master — turn for volume',
+      4: 'LFO — turn for rate; place near a puck to modulate it',
+      5: 'Tonality — turn to pick the key',
     };
 
     // Calibration corner markers — projected by the app, only print for non-projector

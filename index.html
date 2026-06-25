@@ -51,8 +51,9 @@
 
   <div id="start-banner">
     <h1>REACTABLE WALL</h1>
-    <p>Place a puck with ID 0 (Oscillator) on your wall or desk.<br>
-       Turn it to bend the pitch. Add ID 3 (Output) to control volume.</p>
+    <p>Place ID 0 (Oscillator) + ID 3 (Output) to make sound.<br>
+       Drop ID 1 (Filter) or ID 2 (Delay) on the cable between them to shape it.<br>
+       ID 4 (LFO) modulates the nearest puck. ID 5 (Tonality) keeps you in key.</p>
     <button id="start-btn">TAP TO START</button>
   </div>
 
@@ -69,10 +70,12 @@
   <script src="src/calibration.js"></script>
   <!-- New for Reactable Wall -->
   <script src="src/utils/angleSmoothing.js"></script>
+  <script src="src/utils/geometry.js"></script>
+  <script src="src/utils/tonality.js"></script>
   <script src="src/services/moduleRegistry.js"></script>
   <script src="src/services/audioEngine.js"></script>
   <script src="src/components/visualEngine.js"></script>
-  <script src="src/services/patchGraph.js"></script>
+  <script src="src/services/routingGraph.js"></script>
   <!-- Starts webcam automatically on load -->
   <script src="src/services/tracking.js"></script>
 
@@ -109,12 +112,13 @@
     // Wire up the visual engine to both canvases
     visualEngine.init(visCanvas, debugCanvas);
 
-    // Each detection frame: update audio, reconcile patches, redraw visuals
+    // Each detection frame: update audio, recompute routing plan, redraw visuals
     window.onMarkersDetected = function(detected) {
       reconcileModules(detected);
       const active = getActiveModules();
-      patchGraph.reconcilePatches(active);
-      const edges = patchGraph.getPatchEdges(active);
+      const plan = routingGraph.update(active, window.innerWidth);
+      applyRoutingPlan(plan);
+      const edges = routingGraph.getEdges(plan, active);
       visualEngine.draw(detected, edges);
     };
 
