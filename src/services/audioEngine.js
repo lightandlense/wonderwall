@@ -57,23 +57,26 @@ async function initAudio() {
 
 // Decode every loop in the bank once and precompute its peak envelope for the cable view.
 async function preloadLoops() {
-  console.log('[audio] preloadLoops: Tone.ToneAudioBuffer =', typeof Tone.ToneAudioBuffer,
-    '| fromUrl =', Tone.ToneAudioBuffer && typeof Tone.ToneAudioBuffer.fromUrl);
+  // Loops are fetched at runtime; file:// blocks fetch (CORS "unique origin"), so the
+  // Loop puck is silent unless the app is served over http. Warn loudly and actionably.
+  if (typeof location !== 'undefined' && location.protocol === 'file:') {
+    console.warn('[audio] Loop puck DISABLED: open the app via http://localhost (run `npm start`), not as a file:// page.');
+    return;
+  }
   for (const entry of _loopBank.LOOP_BANK) {
     try {
       const buf = await Tone.ToneAudioBuffer.fromUrl(entry.file);
       LOOP_BUFFERS[entry.file] = buf;
       let data = null;
       try { data = (typeof buf.toArray === 'function') ? buf.toArray(0) : null; }
-      catch (pe) { console.warn('[audio] peak calc failed (audio still ok):', entry.file, pe && pe.message); }
+      catch (pe) { /* peaks are cosmetic; audio still plays without them */ }
       LOOP_PEAKS[entry.file] = data ? _cableAnim.peakEnvelope(data, 200) : [];
-      console.log('[audio] loop loaded:', entry.file, '| dur', buf && buf.duration, '| peaks', LOOP_PEAKS[entry.file].length);
     } catch (e) {
-      console.error('[audio] loop load FAILED:', entry.file, '|', e && (e.message || e));
+      console.error('[audio] loop load failed:', entry.file, '|', e && (e.message || e));
       LOOP_PEAKS[entry.file] = [];
     }
   }
-  console.log('[audio] preloadLoops done. buffers loaded:', Object.keys(LOOP_BUFFERS).length, '/', _loopBank.LOOP_BANK.length);
+  console.log('[audio] loops loaded:', Object.keys(LOOP_BUFFERS).length, '/', _loopBank.LOOP_BANK.length);
 }
 
 // Fired once per 16th note by the Transport loop: each active sequencer fires
@@ -155,7 +158,6 @@ function _addModule(id, marker) {
     loopIdx = def.getLoopIndex(smoother.get());
     const entry = _loopBank.LOOP_BANK[loopIdx];
     const buf = LOOP_BUFFERS[entry.file];
-    console.log('[audio] add sampler: loop', loopIdx, entry.file, '| buffer?', !!buf);
     if (buf) {
       const player = new Tone.Player({ url: buf, loop: true });
       player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
@@ -163,9 +165,8 @@ function _addModule(id, marker) {
       node = player;
       meter = new Tone.Meter({ smoothing: 0.8 });
       player.connect(meter);
-      console.log('[audio] sampler player created + synced, rate', player.playbackRate);
     } else {
-      console.warn('[audio] sampler: NO BUFFER for', entry.file, '- no sound will play');
+      console.warn('[audio] Loop puck: no buffer for', entry.file, '— serve over http (npm start) so loops can load.');
     }
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
