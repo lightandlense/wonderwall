@@ -73,6 +73,7 @@
   <script src="src/utils/angleSmoothing.js"></script>
   <script src="src/utils/tonality.js"></script>
   <script src="src/utils/rhythmPatterns.js"></script>
+  <script src="src/utils/cableAnim.js"></script>
   <script src="src/services/moduleRegistry.js"></script>
   <script src="src/services/audioEngine.js"></script>
   <script src="src/components/visualEngine.js"></script>
@@ -126,7 +127,7 @@
         applyRoutingPlan(plan);
         updateModulation();
         const edges = routingGraph.getEdges(plan, active, vp);
-        visualEngine.draw(detected, edges);
+        visualEngine.setFrame(detected, edges); // tracking.js render() draws it every rAF (60fps)
       } catch (err) {
         console.error('[onMarkersDetected] frame error (loop continues):', err);
       }

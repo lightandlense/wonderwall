@@ -176,6 +176,8 @@ function arLoop() {
     }
   }
 
+  // Render every rAF (~60fps) for smooth cable animation; detection stays ~20fps above.
+  if (window.visualEngine && window.visualEngine.render) window.visualEngine.render();
   requestAnimationFrame(arLoop);
 }
 
