@@ -74,3 +74,29 @@ test('getEdges tags control edges with srcId (the controller id)', () => {
   assert.strictEqual(ctrl.srcId, 6);
   assert.strictEqual(ctrl.ctrl, 'sequencer');
 });
+
+test('getEdges: audio edges carry srcId and dstId', () => {
+  const modules = [
+    { id: 0, wx: 100, wy: 100, def: { id: 0, type: 'oscillator', subtype: undefined, color: '#44aaff' } },
+    { id: 3, wx: 300, wy: 100, def: { id: 3, type: 'global', subtype: 'volume', color: '#ffcc44' } },
+  ];
+  const plan = { chains: [{ genId: 0, nodeIds: [0, 'master'] }], controlLinks: [], tonality: null, membership: {} };
+  const edges = routingGraph.getEdges(plan, modules, { w: 1280, h: 720 });
+  const audio = edges.find(e => e.kind === 'audio');
+  assert.ok(audio, 'expected an audio edge');
+  assert.strictEqual(audio.srcId, 0);
+  assert.strictEqual(audio.dstId, 'master');
+});
+
+test('getEdges: control edges carry srcId and dstId', () => {
+  const modules = [
+    { id: 4, wx: 210, wy: 130, def: { id: 4, type: 'controller', subtype: 'lfo', color: '#c98bff' } },
+    { id: 1, wx: 200, wy: 100, def: { id: 1, type: 'effect', subtype: 'filter', color: '#ff8a3d' } },
+  ];
+  const plan = { chains: [], controlLinks: [{ controllerId: 4, targetId: 1 }], tonality: null, membership: {} };
+  const edges = routingGraph.getEdges(plan, modules, { w: 1280, h: 720 });
+  const ctrl = edges.find(e => e.kind === 'control');
+  assert.ok(ctrl, 'expected a control edge');
+  assert.strictEqual(ctrl.srcId, 4);
+  assert.strictEqual(ctrl.dstId, 1);
+});

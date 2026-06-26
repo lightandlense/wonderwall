@@ -113,8 +113,9 @@ function getEdges(plan, modules, viewport) {
 
   plan.chains.forEach(c => {
     for (let i = 0; i < c.nodeIds.length - 1; i++) {
-      const a = posOf(c.nodeIds[i]), b = posOf(c.nodeIds[i + 1]);
-      if (a && b) edges.push({ fromPos: a, toPos: b, kind: 'audio', connected: true, alpha: 1 });
+      const srcId = c.nodeIds[i], dstId = c.nodeIds[i + 1];
+      const a = posOf(srcId), b = posOf(dstId);
+      if (a && b) edges.push({ fromPos: a, toPos: b, kind: 'audio', connected: true, alpha: 1, srcId, dstId });
     }
   });
   plan.controlLinks.forEach(l => {
@@ -122,7 +123,7 @@ function getEdges(plan, modules, viewport) {
     if (!a || !b) return;
     edges.push({
       fromPos: { x: a.wx, y: a.wy }, toPos: { x: b.wx, y: b.wy },
-      kind: 'control', ctrl: a.def.subtype, srcId: l.controllerId, connected: true, alpha: 1,
+      kind: 'control', ctrl: a.def.subtype, srcId: l.controllerId, dstId: l.targetId, connected: true, alpha: 1,
     });
   });
   return edges;
