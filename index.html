@@ -111,14 +111,21 @@
     // Wire up the visual engine to both canvases
     visualEngine.init(visCanvas, debugCanvas);
 
-    // Each detection frame: update audio, recompute routing plan, redraw visuals
+    // Each detection frame: update audio, recompute routing plan, redraw visuals.
+    // Wrapped so a downstream error (e.g. a Tone wiring edge case) is logged but
+    // never escapes — tracking.js reschedules its loop AFTER this call, so an
+    // uncaught throw here would permanently freeze detection.
     window.onMarkersDetected = function(detected) {
-      reconcileModules(detected);
-      const active = getActiveModules();
-      const plan = routingGraph.update(active, window.innerWidth);
-      applyRoutingPlan(plan);
-      const edges = routingGraph.getEdges(plan, active);
-      visualEngine.draw(detected, edges);
+      try {
+        reconcileModules(detected);
+        const active = getActiveModules();
+        const plan = routingGraph.update(active, window.innerWidth);
+        applyRoutingPlan(plan);
+        const edges = routingGraph.getEdges(plan, active);
+        visualEngine.draw(detected, edges);
+      } catch (err) {
+        console.error('[onMarkersDetected] frame error (loop continues):', err);
+      }
     };
 
     // Start button — resumes the AudioContext (browser requires a user gesture)

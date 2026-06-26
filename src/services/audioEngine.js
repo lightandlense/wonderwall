@@ -155,17 +155,23 @@ function _modTargetParam(mod) {
 }
 
 // Set the LFO's min/max window centered on the target's current rotation value.
+// Tone requires min < max; clamp defensively so a degenerate window can't throw.
 function _setLfoWindow(lfoMod, targetMod) {
   const t = targetMod.def.getParamT(targetMod.smoother.get());
+  let min, max;
   if (targetMod.def.type === 'oscillator') {
-    lfoMod.node.min = -30; lfoMod.node.max = 30;             // +-30 cents vibrato
+    min = -30; max = 30;                                      // +-30 cents vibrato
   } else if (targetMod.def.subtype === 'filter') {
     const c = targetMod.def.centerValue(t);
-    lfoMod.node.min = c * 0.5; lfoMod.node.max = c * 2;       // +- octave around cutoff
+    min = c * 0.5; max = c * 2;                               // +- octave around cutoff
   } else if (targetMod.def.subtype === 'delay') {
     const c = targetMod.def.centerValue(t);
-    lfoMod.node.min = Math.max(0, c - 0.2); lfoMod.node.max = Math.min(0.85, c + 0.2);
+    min = Math.max(0, c - 0.2); max = Math.min(0.85, c + 0.2);
+  } else {
+    return;
   }
+  if (!(max > min)) max = min + 1e-3;                         // guarantee a valid window
+  try { lfoMod.node.min = min; lfoMod.node.max = max; } catch (_) {}
 }
 
 // Execute a RoutingPlan: rewire only chains/links that changed; refresh LFO windows.
@@ -195,7 +201,7 @@ function applyRoutingPlan(plan) {
     for (let i = 0; i < chain.nodeIds.length - 1; i++) {
       const a = activeModules[chain.nodeIds[i]];
       const b = activeModules[chain.nodeIds[i + 1]];
-      if (a && a.node && b && b.node) a.node.connect(b.node);
+      if (a && a.node && b && b.node) { try { a.node.connect(b.node); } catch (_) {} }
     }
     // output node still routes to Destination (never disconnected above)
     console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
