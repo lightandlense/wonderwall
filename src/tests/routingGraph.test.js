@@ -64,3 +64,13 @@ test('getEdges maps the master node to the center position', () => {
   const audio = edges.find(e => e.kind === 'audio');
   assert.deepStrictEqual(audio.toPos, { x: 500, y: 500 });
 });
+
+test('getEdges tags control edges with srcId (the controller id)', () => {
+  const mods = [osc(0, 200, 500), seq(6, 210, 520)];
+  const plan = routingGraph.buildRawPlan(mods, VP, new Set());
+  const edges = routingGraph.getEdges(plan, mods, VP);
+  const ctrl = edges.find(e => e.kind === 'control');
+  assert.ok(ctrl, 'a control edge exists');
+  assert.strictEqual(ctrl.srcId, 6);
+  assert.strictEqual(ctrl.ctrl, 'sequencer');
+});

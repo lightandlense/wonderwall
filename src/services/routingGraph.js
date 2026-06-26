@@ -122,7 +122,7 @@ function getEdges(plan, modules, viewport) {
     if (!a || !b) return;
     edges.push({
       fromPos: { x: a.wx, y: a.wy }, toPos: { x: b.wx, y: b.wy },
-      kind: 'control', ctrl: a.def.subtype, connected: true, alpha: 1,
+      kind: 'control', ctrl: a.def.subtype, srcId: l.controllerId, connected: true, alpha: 1,
     });
   });
   return edges;
