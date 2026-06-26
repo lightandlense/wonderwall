@@ -5,15 +5,29 @@ const visualEngine = (() => {
   let visCtx   = null; // reactive visuals canvas (rings, arcs, labels)
   let debugCtx = null; // ArUco debug overlay (green boxes, status bar)
 
+  const _anim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
+  const SPACING = 55, SPEED = 130, PULSE_MS = 150; // cable-flow tuning
+  let _lastMarkers = [], _lastEdges = []; // cached frame state, drawn every rAF by render()
+
   function init(visCanvas, dbgCanvas) {
     visCtx   = visCanvas.getContext('2d');
     debugCtx = dbgCanvas.getContext('2d');
   }
 
-  // detectedWorldMarkers: [{id, wx, wy, angle, screenCorners}]
-  // edges: [{fromPos, toPos, kind:'audio'|'control', connected, alpha}] — optional
-  function draw(detectedWorldMarkers, edges) {
+  // Cache the latest detection frame (called ~20fps on detection frames).
+  function setFrame(markers, edges) {
+    _lastMarkers = markers || [];
+    _lastEdges = edges || [];
+  }
+
+  // Back-compat: cache + draw in one call (used by tests and any direct callers).
+  function draw(markers, edges) { setFrame(markers, edges); render(); }
+
+  // Draw the cached frame; called every rAF (~60fps) so animation is smooth.
+  function render() {
     if (!visCtx || !debugCtx) return;
+    const detectedWorldMarkers = _lastMarkers;
+    const edges = _lastEdges;
 
     const W = visCtx.canvas.width;
     const H = visCtx.canvas.height;
@@ -287,22 +301,37 @@ const visualEngine = (() => {
       visCtx.lineTo(toPos.x, toPos.y);
       visCtx.stroke();
 
-      // Midpoint glow dot on active connections
-      if (connected) {
-        const mx = (fromPos.x + toPos.x) / 2;
-        const my = (fromPos.y + toPos.y) / 2;
-        visCtx.fillStyle  = kind === 'control' ? (ctrl === 'sequencer' ? '#ffd9a0' : '#e0b3ff') : '#88ffcc';
-        visCtx.shadowBlur = 20;
-        visCtx.beginPath();
-        visCtx.arc(mx, my, 4, 0, 2 * Math.PI);
-        visCtx.fill();
+      // Flowing animation along the cable, source -> destination, time-driven.
+      const now = (typeof performance !== 'undefined') ? performance.now() : 0;
+      const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+      const len = Math.hypot(dx, dy);
+      if (connected && len > 0) {
+        const ux = dx / len, uy = dy / len;
+        if (kind === 'control' && ctrl === 'sequencer') {
+          // beat-synced pulse: one bright dot per step-hit travelling to the oscillator
+          const pulses = (typeof getSeqPulses === 'function') ? getSeqPulses() : {};
+          const prog = _anim.pulseProgress(pulses[edge.srcId], now, PULSE_MS);
+          if (prog != null) {
+            const px = fromPos.x + ux * len * prog, py = fromPos.y + uy * len * prog;
+            visCtx.fillStyle = '#ffd9a0'; visCtx.shadowColor = '#ffb74d'; visCtx.shadowBlur = 22;
+            visCtx.beginPath(); visCtx.arc(px, py, 5, 0, 2 * Math.PI); visCtx.fill();
+          }
+        } else {
+          // constant flow (audio green / LFO purple)
+          const dotColor = kind === 'control' ? '#e0b3ff' : '#88ffcc';
+          _anim.flowDotDistances(len, SPACING, SPEED, now).forEach(d => {
+            const px = fromPos.x + ux * d, py = fromPos.y + uy * d;
+            visCtx.fillStyle = dotColor; visCtx.shadowColor = dotColor; visCtx.shadowBlur = 14;
+            visCtx.beginPath(); visCtx.arc(px, py, 3, 0, 2 * Math.PI); visCtx.fill();
+          });
+        }
       }
 
       visCtx.restore();
     });
   }
 
-  return { init, draw };
+  return { init, draw, setFrame, render };
 })();
 
 window.visualEngine = visualEngine;
