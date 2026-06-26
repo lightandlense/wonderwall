@@ -177,8 +177,14 @@ function applyRoutingPlan(plan) {
     if (_lastChainKeys[chain.genId] === key) return; // unchanged
     _lastChainKeys[chain.genId] = key;
 
-    // Disconnect every node in the chain, then reconnect in series.
-    chain.nodeIds.forEach(id => { const m = activeModules[id]; if (m && m.node) { try { m.node.disconnect(); } catch (_) {} } });
+    // Disconnect the source nodes (generator + effects) before re-wiring.
+    // NEVER disconnect the output node: it reaches the speaker via .toDestination()
+    // set at creation, and disconnect() would sever that, killing all sound.
+    chain.nodeIds.forEach(id => {
+      if (id === chain.outputId) return;
+      const m = activeModules[id];
+      if (m && m.node) { try { m.node.disconnect(); } catch (_) {} }
+    });
 
     if (!chain.outputId) return; // silent: leave generator disconnected
 
@@ -187,7 +193,7 @@ function applyRoutingPlan(plan) {
       const b = activeModules[chain.nodeIds[i + 1]];
       if (a && a.node && b && b.node) a.node.connect(b.node);
     }
-    // output node already routes to Destination (created with .toDestination())
+    // output node still routes to Destination (never disconnected above)
     console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
   });
   // generators that vanished from the plan: drop their cached key
