@@ -11,7 +11,7 @@
     .grid { display: flex; flex-wrap: wrap; gap: 32px; }
     .card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .card label { font-size: 13px; font-weight: bold; color: #333; }
-    .card svg { border: 2px solid #000; }
+    .card svg { border: 2px solid #000; image-rendering: pixelated; }
     .card .info { font-size: 11px; color: #666; text-align: center; }
     .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
     button {
@@ -45,7 +45,9 @@
     Print at <strong>10 cm+</strong> per marker for reliable detection at arm's length.<br>
     <strong>Corner markers (10, 11, 13, 18)</strong> are projected by the app when running
     with a projector — only print these for non-projector use.<br>
-    <strong>Puck markers (0–5)</strong> go on your physical pucks or taped to paper.
+    <strong>Puck markers (0–5)</strong> go on your physical pucks or taped to paper.<br>
+    <em>This page is fully self-contained — it needs no internet and no other files, so it
+    prints correctly even when copied to another computer on its own.</em>
   </p>
 
   <div class="controls">
@@ -57,11 +59,45 @@
 
   <div class="grid" id="grid"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/cv.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/js-aruco2/src/aruco.js"></script>
-  <script src="src/aruco-4x4-dict.js"></script>
   <script>
+    // ── Self-contained ArUco DICT_4X4_50 marker rendering ────────────────────
+    // Codes extracted from cv2.aruco.getPredefinedDictionary(DICT_4X4_50).
+    // generateSVG() is a verbatim port of js-aruco2's AR.Dictionary.generateSVG
+    // so printed markers are byte-identical to the detector's expectation.
+    // Inlined (no CDN, no src/aruco-4x4-dict.js) so a lone print.html still works.
     const MARKER_DICT = 'ARUCO_4X4_50';
+    const NBITS = 16;
+    const SIDE  = Math.sqrt(NBITS); // 4 -> inner 4x4 data grid
+
+    // ID -> 16-bit code (index = marker ID)
+    const CODES = [
+      0xb532, 0x0f9a, 0x332d, 0x9946, 0x549e, 0x79cd, 0x9e2e, 0xc4f2,
+      0xfeda, 0xcf56, 0xf991, 0x11a7, 0x0eb7, 0x2a0f, 0x24b1, 0x263e,
+      0x4665, 0x6600, 0x6c5e, 0x76af, 0x868b, 0xb02b, 0xccd5, 0xdd82,
+      0xfe47, 0x9471, 0xace4, 0xa554, 0x2123, 0x346f, 0x4415, 0x57b2,
+      0x9ecf, 0xf0cb, 0x08ae, 0x0929, 0x1875, 0x04ff, 0x0df6, 0x1c5a,
+      0x1718, 0x2a28, 0x328c, 0x38b2, 0x24e8, 0x2eeb, 0x2d3f, 0x4b64,
+      0x502e, 0x5013,
+    ];
+
+    // Port of AR.Dictionary.generateSVG: white quiet zone, black border ring,
+    // 4x4 data cells (bit '1' = white) indexed row-major, MSB = top-left.
+    function generateSVG(code) {
+      const bits = code.toString(2).padStart(NBITS, '0');
+      const size = SIDE; // 4
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size + 4} ${size + 4}">`;
+      svg += `<rect x="0" y="0" width="${size + 4}" height="${size + 4}" fill="white"/>`;
+      svg += `<rect x="1" y="1" width="${size + 2}" height="${size + 2}" fill="black"/>`;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (bits[y * size + x] === '1') {
+            svg += `<rect x="${x + 2}" y="${y + 2}" width="1" height="1" fill="white"/>`;
+          }
+        }
+      }
+      svg += '</svg>';
+      return svg;
+    }
 
     // Puck markers — the audio modules
     const PUCK_IDS = [0, 1, 2, 3, 4, 5];
@@ -83,16 +119,15 @@
       13: 'BOTTOM-LEFT corner',
     };
 
-    function makeCard(id, label, info, size, dict) {
-      const svgStr = dict.generateSVG(id);
-      const card   = document.createElement('div');
+    function makeCard(id, label, info, size) {
+      const card = document.createElement('div');
       card.className = 'card';
 
       const lbl = document.createElement('label');
       lbl.textContent = `ID ${id} — ${label}`;
 
       const svgWrap = document.createElement('div');
-      svgWrap.innerHTML = svgStr;
+      svgWrap.innerHTML = generateSVG(CODES[id]);
       const svgEl = svgWrap.querySelector('svg');
       if (svgEl) {
         svgEl.setAttribute('width', size);
@@ -129,7 +164,6 @@
 
     function renderMarkers() {
       const size = parseInt(document.getElementById('sizeInput').value, 10) || 200;
-      const dict = new AR.Dictionary(MARKER_DICT);
       const grid = document.getElementById('grid');
       grid.innerHTML = '';
 
@@ -137,7 +171,7 @@
       grid.appendChild(sectionHeading('Puck markers — attach to your physical pucks'));
 
       PUCK_IDS.forEach(id => {
-        const card = makeCard(id, PUCK_LABELS[id] || '', `${MARKER_DICT} · ID ${id}`, size, dict);
+        const card = makeCard(id, PUCK_LABELS[id] || '', `${MARKER_DICT} · ID ${id}`, size);
         grid.appendChild(card);
       });
 
@@ -147,7 +181,7 @@
       ));
 
       CALIB_IDS.forEach(id => {
-        const card = makeCard(id, CALIB_LABELS[id], `${MARKER_DICT} · ID ${id} · calibration`, size, dict);
+        const card = makeCard(id, CALIB_LABELS[id], `${MARKER_DICT} · ID ${id} · calibration`, size);
         card.style.cssText += 'background:#f0f8ff;padding:8px;border-radius:4px;border:2px solid #4af;';
         grid.appendChild(card);
       });
