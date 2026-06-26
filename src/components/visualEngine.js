@@ -6,7 +6,13 @@ const visualEngine = (() => {
   let debugCtx = null; // ArUco debug overlay (green boxes, status bar)
 
   const _anim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
-  const SPACING = 55, SPEED = 130, PULSE_MS = 150; // cable-flow tuning
+  const PULSE_MS = 150;                                  // sequencer beat-pulse window
+  const WAVELENGTH = 42, MAX_AMP = 14, SAMPLE_STEP = 6;  // audio/effect waveform
+  const LFO_WAVELENGTH = 80, LFO_AMP = 6;                // slow control ripple
+  const TAIL_SEGS = 4, TAIL_SPACING = 7;                 // sequencer pulse comet tail
+  const RING_PULSE_MAX = 10;                             // extra px the ring glow grows
+  const RING_ALPHA_MIN = 0.15, RING_ALPHA_MAX = 0.7;     // pulse glow alpha range
+  const HUB_COLOR = '#88ffcc';                           // master output color
   let _lastMarkers = [], _lastEdges = []; // cached frame state, drawn every rAF by render()
 
   function init(visCanvas, dbgCanvas) {
@@ -45,14 +51,14 @@ const visualEngine = (() => {
     visCtx.beginPath(); visCtx.arc(cx, cy, 18, 0, 2 * Math.PI); visCtx.stroke();
     visCtx.restore();
 
-    // Draw edges beneath module rings so rings appear on top
-    if (edges && edges.length > 0) {
-      _drawEdges(edges);
-    }
-
-    // Index active modules by id for quick lookup
+    // Index active modules by id for quick lookup (needed by edge coloring + rings)
     const activeById = {};
     getActiveModules().forEach(m => { activeById[m.id] = m; });
+
+    // Draw edges beneath module rings so rings appear on top
+    if (edges && edges.length > 0) {
+      _drawEdges(edges, activeById);
+    }
 
     // Draw a ring + param arc for each detected marker that has an active module
     detectedWorldMarkers.forEach(marker => {
@@ -75,6 +81,22 @@ const visualEngine = (() => {
       visCtx.arc(wx, wy, ringR, 0, 2 * Math.PI);
       visCtx.stroke();
       visCtx.restore();
+
+      // Level-reactive pulse: an extra outer glow ring that grows/brightens with output level.
+      const lvl = (typeof getModuleLevel === 'function') ? getModuleLevel(mod.id) : 0;
+      if (lvl > 0.01) {
+        visCtx.save();
+        visCtx.globalCompositeOperation = 'lighter';
+        visCtx.globalAlpha = RING_ALPHA_MIN + (RING_ALPHA_MAX - RING_ALPHA_MIN) * lvl;
+        visCtx.strokeStyle = def.color;
+        visCtx.shadowColor = def.color;
+        visCtx.shadowBlur = 16;
+        visCtx.lineWidth = 2;
+        visCtx.beginPath();
+        visCtx.arc(wx, wy, ringR + RING_PULSE_MAX * lvl, 0, 2 * Math.PI);
+        visCtx.stroke();
+        visCtx.restore();
+      }
 
       // Use the module's mapped [0,1] value for display — avoids the 0/2π wrap
       // discontinuity that raw angle produces when the topmost edge flips at ~45°.
@@ -272,61 +294,106 @@ const visualEngine = (() => {
     debugCtx.restore();
   }
 
-  // edges: [{fromPos, toPos, kind:'audio'|'control', connected, alpha}]
-  // 'audio' = green glowing cable; 'control' = purple dotted modulation link.
-  function _drawEdges(edges) {
+  // edges: [{fromPos, toPos, kind, ctrl, connected, alpha, srcId, dstId}]
+  // Each connected cable renders its source signal as an animated wave; disconnected = faint dash.
+  function _drawEdges(edges, activeById) {
+    const now = (typeof performance !== 'undefined') ? performance.now() : 0;
+    const colorOf = (id) => (id === 'master' ? HUB_COLOR : (activeById[id] && activeById[id].def.color) || HUB_COLOR);
+
     edges.forEach(edge => {
-      const { fromPos, toPos, kind, connected, alpha, ctrl } = edge;
-
-      visCtx.save();
-      if (kind === 'control') {
-        const amber = ctrl === 'sequencer'; // sequencer trigger = amber; LFO = purple
-        visCtx.globalAlpha = alpha * 0.9;
-        visCtx.strokeStyle = amber ? '#ffb74d' : '#c98bff';
-        visCtx.lineWidth   = 2;
-        visCtx.shadowColor = amber ? '#ffb74d' : '#c98bff';
-        visCtx.shadowBlur  = 12;
-        visCtx.setLineDash([3, 9]);
-      } else {
-        visCtx.globalAlpha = alpha * (connected ? 0.9 : 0.35);
-        visCtx.strokeStyle = connected ? '#88ffcc' : '#aaaaff';
-        visCtx.lineWidth   = connected ? 2 : 1;
-        visCtx.shadowColor = connected ? '#44ffaa' : '#8888ff';
-        visCtx.shadowBlur  = connected ? 16 : 6;
-        if (!connected) visCtx.setLineDash([8, 8]);
-      }
-
-      visCtx.beginPath();
-      visCtx.moveTo(fromPos.x, fromPos.y);
-      visCtx.lineTo(toPos.x, toPos.y);
-      visCtx.stroke();
-
-      // Flowing animation along the cable, source -> destination, time-driven.
-      const now = (typeof performance !== 'undefined') ? performance.now() : 0;
+      const { fromPos, toPos, kind, connected, alpha, ctrl, srcId, dstId } = edge;
       const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
       const len = Math.hypot(dx, dy);
-      if (connected && len > 0) {
-        const ux = dx / len, uy = dy / len;
-        if (kind === 'control' && ctrl === 'sequencer') {
-          // beat-synced pulse: one bright dot per step-hit travelling to the oscillator
-          const pulses = (typeof getSeqPulses === 'function') ? getSeqPulses() : {};
-          const prog = _anim.pulseProgress(pulses[edge.srcId], now, PULSE_MS);
-          if (prog != null) {
-            const px = fromPos.x + ux * len * prog, py = fromPos.y + uy * len * prog;
-            visCtx.fillStyle = '#ffd9a0'; visCtx.shadowColor = '#ffb74d'; visCtx.shadowBlur = 22;
-            visCtx.beginPath(); visCtx.arc(px, py, 5, 0, 2 * Math.PI); visCtx.fill();
-          }
-        } else {
-          // constant flow (audio green / LFO purple)
-          const dotColor = kind === 'control' ? '#e0b3ff' : '#88ffcc';
-          _anim.flowDotDistances(len, SPACING, SPEED, now).forEach(d => {
-            const px = fromPos.x + ux * d, py = fromPos.y + uy * d;
-            visCtx.fillStyle = dotColor; visCtx.shadowColor = dotColor; visCtx.shadowBlur = 14;
-            visCtx.beginPath(); visCtx.arc(px, py, 3, 0, 2 * Math.PI); visCtx.fill();
-          });
-        }
+
+      visCtx.save();
+
+      // Disconnected: faint dashed straight line, no signal (Phase 5 look).
+      if (!connected || len === 0) {
+        visCtx.globalAlpha = alpha * 0.35;
+        visCtx.strokeStyle = '#aaaaff';
+        visCtx.lineWidth = 1;
+        visCtx.setLineDash([8, 8]);
+        visCtx.beginPath(); visCtx.moveTo(fromPos.x, fromPos.y); visCtx.lineTo(toPos.x, toPos.y); visCtx.stroke();
+        visCtx.restore();
+        return;
       }
 
+      const ux = dx / len, uy = dy / len;       // along-cable unit vector
+      const px = -uy, py = ux;                   // perpendicular unit vector
+
+      // Source -> dest color gradient, applied to whatever we stroke on this cable.
+      const grad = visCtx.createLinearGradient(fromPos.x, fromPos.y, toPos.x, toPos.y);
+      grad.addColorStop(0, colorOf(srcId));
+      grad.addColorStop(1, colorOf(dstId));
+
+      // Sequencer trigger link: dim base line + one beat-synced comet pulse (no continuous wave).
+      if (kind === 'control' && ctrl === 'sequencer') {
+        visCtx.globalAlpha = alpha * 0.5;
+        visCtx.strokeStyle = grad; visCtx.lineWidth = 2;
+        visCtx.shadowColor = '#ffb74d'; visCtx.shadowBlur = 8; visCtx.setLineDash([3, 9]);
+        visCtx.beginPath(); visCtx.moveTo(fromPos.x, fromPos.y); visCtx.lineTo(toPos.x, toPos.y); visCtx.stroke();
+
+        const pulses = (typeof getSeqPulses === 'function') ? getSeqPulses() : {};
+        const prog = _anim.pulseProgress(pulses[srcId], now, PULSE_MS);
+        if (prog != null) {
+          const head = len * prog;
+          visCtx.globalCompositeOperation = 'lighter';
+          visCtx.setLineDash([]);
+          const drawDot = (d, a, r) => {
+            const x = fromPos.x + ux * d, y = fromPos.y + uy * d;
+            visCtx.globalAlpha = a; visCtx.fillStyle = '#ffd9a0';
+            visCtx.shadowColor = '#ffb74d'; visCtx.shadowBlur = 22;
+            visCtx.beginPath(); visCtx.arc(x, y, r, 0, 2 * Math.PI); visCtx.fill();
+          };
+          _anim.cometTail(head, TAIL_SEGS, TAIL_SPACING, len).forEach(s => drawDot(s.d, s.alpha * 0.8, 3));
+          drawDot(head, 1, 5);
+        }
+        visCtx.restore();
+        return;
+      }
+
+      // Everything else renders an animated wave scrolling source -> dest.
+      const isControl = kind === 'control';                     // LFO link
+      const srcMod = activeById[srcId];
+      const srcType = srcMod && srcMod.def ? (srcMod.def.subtype || srcMod.def.type) : 'oscillator';
+      const level = (typeof getModuleLevel === 'function') ? getModuleLevel(srcId) : 0.5;
+
+      let shape, wavelength, amp, speed;
+      if (isControl) {                                          // LFO: slow fixed-amp sine
+        shape = 'sine'; wavelength = LFO_WAVELENGTH; amp = LFO_AMP;
+        const rate = (typeof getLfoRate === 'function') ? getLfoRate(srcId) : 1;
+        speed = _anim.flowSpeed({ kind, ctrl, lfoRate: rate });
+      } else {                                                  // audio chain
+        shape = (srcType === 'filter') ? 'softsaw' : 'saw';
+        wavelength = WAVELENGTH; amp = MAX_AMP * level;
+        speed = _anim.flowSpeed({ kind: 'audio', level });
+      }
+
+      const phase = -(speed * (now / 1000)) / wavelength;        // scroll source -> dest
+      const offs = _anim.waveSamples(len, { shape, wavelength, amplitude: amp, phase, step: SAMPLE_STEP });
+
+      // Reconstruct the d positions waveSamples used (0,step,...,len).
+      const ds = [];
+      for (let d = 0; d <= len; d += SAMPLE_STEP) ds.push(d);
+      if (ds.length === 0 || ds[ds.length - 1] !== len) ds.push(len);
+
+      const isDelay = !isControl && srcType === 'delay';
+      visCtx.globalCompositeOperation = 'lighter';              // additive bloom
+      visCtx.globalAlpha = alpha * (isControl ? 0.8 : 0.95);
+      visCtx.strokeStyle = grad;
+      visCtx.lineWidth = isControl ? 1.5 : 2;
+      visCtx.lineCap = 'round'; visCtx.lineJoin = 'round';
+      visCtx.shadowColor = colorOf(srcId); visCtx.shadowBlur = 14;
+      visCtx.beginPath();
+      for (let k = 0; k < offs.length; k++) {
+        const d = ds[k];
+        const env = isDelay ? _anim.echoEnvelope(d, len, { count: 3, decay: 0.55 }) : 1;
+        const o = offs[k] * env;
+        const x = fromPos.x + ux * d + px * o;
+        const y = fromPos.y + uy * d + py * o;
+        if (k === 0) visCtx.moveTo(x, y); else visCtx.lineTo(x, y);
+      }
+      visCtx.stroke();
       visCtx.restore();
     });
   }

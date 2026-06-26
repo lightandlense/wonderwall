@@ -85,7 +85,7 @@ test('all browser scripts load in one shared scope without redeclaration errors'
 test('the per-frame handler does not throw (audio off and on, empty + osc/out markers)', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
-  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : () => {}) });
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
   ctx.__fakeCtx = fakeCtx;
   vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
   vm.runInContext(`
@@ -125,7 +125,7 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
 test('oscillator + output produces an audio path that reaches the speaker', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
-  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : () => {}) });
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
   ctx.__fakeCtx = fakeCtx;
   vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
   vm.runInContext(`
@@ -150,7 +150,7 @@ test('oscillator + output produces an audio path that reaches the speaker', asyn
 test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
-  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : () => {}) });
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
   ctx.__fakeCtx = fakeCtx;
   vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
   vm.runInContext(`window.onMarkersDetected = function (d) {
