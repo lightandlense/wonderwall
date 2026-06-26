@@ -125,13 +125,16 @@ const visualEngine = (() => {
       visCtx.fillText(def.name.toUpperCase(), wx, wy - ringR - 14);
       visCtx.restore();
 
-      // Param percentage below the ring
+      // Param value below the ring — loop name for samplers, percentage otherwise
       const paramPct = Math.round(paramT * 100);
+      const belowLabel = (def.type === 'sampler' && def.getName)
+        ? `${def.paramLabel}: ${def.getName(angle)}`
+        : `${def.paramLabel}: ${paramPct}%`;
       visCtx.save();
       visCtx.fillStyle = 'rgba(255,255,255,0.65)';
       visCtx.font      = '11px monospace';
       visCtx.textAlign = 'center';
-      visCtx.fillText(`${def.paramLabel}: ${paramPct}%`, wx, wy + ringR + 18);
+      visCtx.fillText(belowLabel, wx, wy + ringR + 18);
       visCtx.restore();
 
       // Sequencer: ring of 16 step dots + sweeping playhead + pattern name
@@ -170,6 +173,25 @@ const visualEngine = (() => {
       visCtx.font      = '14px monospace';
       visCtx.textAlign = 'left';
       visCtx.fillText(`♪ ${NAMES[root]} minor pentatonic`, px + 18, py + 22);
+      visCtx.restore();
+    }
+
+    // Tempo HUD pill (below the Tonality pill) when a Tempo puck is present
+    const tempoMod = getActiveModules().find(m => m.def.subtype === 'tempo');
+    if (tempoMod) {
+      const bpm = tempoMod.def.getBpm(tempoMod.angle);
+      visCtx.save();
+      visCtx.fillStyle   = 'rgba(26,12,12,0.85)';
+      visCtx.strokeStyle = '#4a1f1f';
+      const px2 = W - 360, py2 = 64;
+      visCtx.beginPath();
+      if (visCtx.roundRect) visCtx.roundRect(px2, py2, 180, 34, 17); else visCtx.rect(px2, py2, 180, 34);
+      visCtx.fill();
+      visCtx.stroke();
+      visCtx.fillStyle = '#ff9a9a';
+      visCtx.font      = '14px monospace';
+      visCtx.textAlign = 'left';
+      visCtx.fillText(`TEMPO  ${bpm} BPM`, px2 + 16, py2 + 22);
       visCtx.restore();
     }
 
@@ -356,6 +378,40 @@ const visualEngine = (() => {
       const isControl = kind === 'control';                     // LFO link
       const srcMod = activeById[srcId];
       const srcType = srcMod && srcMod.def ? (srcMod.def.subtype || srcMod.def.type) : 'oscillator';
+
+      // Sampler: draw the loop's real sample waveform (mirrored peak envelope) scrolling along the cable.
+      if (srcType === 'sampler') {
+        const peaks = (typeof getLoopPeaks === 'function') ? getLoopPeaks(srcId) : [];
+        if (peaks.length > 1) {
+          const lvl = (typeof getModuleLevel === 'function') ? getModuleLevel(srcId) : 0.5;
+          const amp = MAX_AMP * (0.4 + 0.6 * lvl);
+          const speed = _anim.flowSpeed({ kind: 'audio', level: lvl });
+          const scroll = Math.floor((speed * (now / 1000)) / SAMPLE_STEP);
+          const N = Math.max(2, Math.floor(len / SAMPLE_STEP));
+          visCtx.globalCompositeOperation = 'lighter';
+          visCtx.globalAlpha = alpha * 0.9;
+          visCtx.strokeStyle = grad; visCtx.lineWidth = 2; visCtx.lineJoin = 'round';
+          visCtx.shadowColor = colorOf(srcId); visCtx.shadowBlur = 12;
+          visCtx.beginPath();
+          for (let k = 0; k <= N; k++) {                        // top edge (+peak)
+            const d = (k / N) * len;
+            const pk = peaks[(k + scroll) % peaks.length] * amp;
+            const x = fromPos.x + ux * d + px * pk, y = fromPos.y + uy * d + py * pk;
+            if (k === 0) visCtx.moveTo(x, y); else visCtx.lineTo(x, y);
+          }
+          for (let k = N; k >= 0; k--) {                        // bottom edge (-peak)
+            const d = (k / N) * len;
+            const pk = peaks[(k + scroll) % peaks.length] * amp;
+            const x = fromPos.x + ux * d - px * pk, y = fromPos.y + uy * d - py * pk;
+            visCtx.lineTo(x, y);
+          }
+          visCtx.closePath(); visCtx.stroke();
+          visCtx.restore();
+          return;
+        }
+        // no peaks yet -> fall through to the generic wave below
+      }
+
       const level = (typeof getModuleLevel === 'function') ? getModuleLevel(srcId) : 0.5;
 
       let shape, wavelength, amp, speed;
