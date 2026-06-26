@@ -175,27 +175,18 @@ const visualEngine = (() => {
       calibColor = '#ff6644';
     }
 
-    // Patch distance debug line
+    // Audio debug line — oscillators always reach the center master hub
     const active = getActiveModules();
     const oscs   = active.filter(m => m.def.type === 'oscillator');
-    const outs   = active.filter(m => m.def.type === 'output');
     let patchText, patchColor;
-    if (oscs.length === 0 || outs.length === 0) {
-      patchText  = `Patch: waiting — active mods: ${active.map(m => `ID${m.id}(${m.def.type})`).join(', ') || 'none'}`;
+    if (oscs.length === 0) {
+      patchText  = 'Audio: no oscillator — place ID 0 to make sound';
       patchColor = '#888888';
     } else {
       let minDist = Infinity;
-      oscs.forEach(o => outs.forEach(u => {
-        const d = Math.sqrt((o.wx - u.wx) ** 2 + (o.wy - u.wy) ** 2);
-        if (d < minDist) minDist = d;
-      }));
-      const _pr = window.innerWidth * 0.35;
-      const connected  = minDist < _pr;
-      const approaching = minDist < _pr * 1.5;
-      const pr = Math.round(window.innerWidth * 0.35);
-      const ar = Math.round(pr * 1.5);
-      patchText  = `Patch: dist=${Math.round(minDist)}px — ${connected ? 'CONNECTED' : approaching ? `approaching (need <${pr})` : `far (need <${ar} for preview)`}`;
-      patchColor = connected ? '#44ffaa' : approaching ? '#ffcc44' : '#ff6644';
+      oscs.forEach(o => { const d = Math.hypot(o.wx - W / 2, o.wy - H / 2); if (d < minDist) minDist = d; });
+      patchText  = `Audio: ${oscs.length} oscillator(s) -> center (nearest ${Math.round(minDist)}px)`;
+      patchColor = '#44ffaa';
     }
 
     // Routing summary line (effect/controller counts; full chain logged to console)
