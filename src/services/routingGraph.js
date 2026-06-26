@@ -54,13 +54,14 @@ function buildRawPlan(modules, viewport, prevMembership) {
     return { genId: gen.id, nodeIds: nodes };
   });
 
-  // controller links: lfo -> nearest osc|effect; sequencer -> nearest oscillator
+  // controller links: lfo -> nearest osc|sampler|effect; sequencer -> nearest osc|sampler
+  // (matches the original Reactable: all generators can receive control data)
   const controlLinks = [];
   controllers.forEach(c => {
     const wantsEffect = c.def.subtype === 'lfo';
     let target = null, td = Infinity;
     modules.forEach(m => {
-      const ok = m.def.type === 'oscillator' || (wantsEffect && m.def.type === 'effect');
+      const ok = m.def.type === 'oscillator' || m.def.type === 'sampler' || (wantsEffect && m.def.type === 'effect');
       if (!ok) return;
       const d = _dist(c, m);
       if (d < controlR && d < td) { target = m; td = d; }

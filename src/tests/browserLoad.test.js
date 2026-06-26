@@ -209,3 +209,29 @@ test('Loop + Tempo pucks: play through master, expose peaks, set tempo', async (
   });
   assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]); });
 });
+
+test('controllers can drive the loop: seq gate + lfo wobble run clean', async () => {
+  const ctx = makeSandbox();
+  loadAll(ctx);
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
+  ctx.__fakeCtx = fakeCtx;
+  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
+  vm.runInContext(`window.onMarkersDetected = function (d) {
+    reconcileModules(d); const a = getActiveModules();
+    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
+    updateModulation();
+  };`, ctx);
+  await vm.runInContext('initAudio()', ctx);
+
+  const loop = { id: 7, wx: 400, wy: 400, angle: 0 };
+  const seq  = { id: 6, wx: 440, wy: 420, angle: 0 };   // near the loop -> sequencer gates it
+  const lfo  = { id: 4, wx: 440, wy: 420, angle: 1 };   // near the loop -> lfo wobbles it
+
+  assert.doesNotThrow(() => {
+    for (let i = 0; i < 8; i++) ctx.onMarkersDetected([loop, seq]);  // gate on (loop stops free-run)
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]);       // gate off (loop resumes)
+    for (let i = 0; i < 8; i++) ctx.onMarkersDetected([loop, lfo]);  // lfo wobbles playbackRate
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]);       // lfo removed
+  });
+  assert.ok(ctx.__synthReachesDest(), 'loop still reaches master after controller links');
+});

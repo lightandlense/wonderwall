@@ -112,3 +112,17 @@ test('buildRawPlan: a filter inserts on a sampler chain', () => {
   const plan = routingGraph.buildRawPlan([samp(7, 200, 500), eff(1, 350, 500, 'filter')], VP, new Set());
   assert.deepStrictEqual(plan.chains[0].nodeIds, [7, 1, 'master']);
 });
+
+test('buildRawPlan: a sequencer links to a nearby sampler (loop)', () => {
+  const plan = routingGraph.buildRawPlan([samp(7, 480, 480), seq(6, 520, 500)], VP, new Set());
+  const link = plan.controlLinks.find(l => l.controllerId === 6);
+  assert.ok(link, 'sequencer should link to something');
+  assert.strictEqual(link.targetId, 7);
+});
+
+test('buildRawPlan: an LFO links to a nearby sampler (loop)', () => {
+  const plan = routingGraph.buildRawPlan([samp(7, 480, 480), lfo(4, 520, 500)], VP, new Set());
+  const link = plan.controlLinks.find(l => l.controllerId === 4);
+  assert.ok(link, 'lfo should link to something');
+  assert.strictEqual(link.targetId, 7);
+});

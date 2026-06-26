@@ -80,27 +80,33 @@ async function preloadLoops() {
 }
 
 // Fired once per 16th note by the Transport loop: each active sequencer fires
-// its target oscillator on hit steps.
+// its target on hit steps — pulses an oscillator, or stutter-retriggers a loop.
 function _onStep(time) {
   _step = (_step + 1) % _rhythm.STEPS;
   Object.keys(_activeLinks).forEach(cidStr => {
     const cid = Number(cidStr);
     const ctrl = activeModules[cid];
     if (!ctrl || ctrl.def.subtype !== 'sequencer') return;
-    const osc = activeModules[_activeLinks[cid]];
-    if (!osc || osc.def.type !== 'oscillator' || !osc.node) return;
+    const tgt = activeModules[_activeLinks[cid]];
+    if (!tgt || !tgt.node) return;
     const pat = _rhythm.PATTERNS[ctrl.def.getPatternIndex(ctrl.smoother.get())];
     if (!pat || !pat.steps[_step]) return;
     _seqPulses[cid] = (typeof performance !== 'undefined') ? performance.now() : 0; // for cable pulse anim
+
+    if (tgt.def.type === 'sampler') {
+      try { tgt.node.restart(time); } catch (_) {}   // stutter: retrigger the loop from the start
+      return;
+    }
+    if (tgt.def.type !== 'oscillator') return;
     let freq;
     if (_tonality && _tonality.active) {
       const idx = (_seqIndex[cid] || 0);
-      freq = _tonalityUtil.scaleDegreeFreq(osc.def.getFreq(osc.smoother.get()), _tonality.root, idx);
+      freq = _tonalityUtil.scaleDegreeFreq(tgt.def.getFreq(tgt.smoother.get()), _tonality.root, idx);
       _seqIndex[cid] = idx + 1;
     } else {
-      freq = _oscFreq(osc.def, osc.smoother.get());
+      freq = _oscFreq(tgt.def, tgt.smoother.get());
     }
-    try { osc.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
+    try { tgt.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
   });
 }
 
@@ -228,8 +234,11 @@ function _updateModule(id, marker) {
   } else if (m.def.type === 'sampler' && m.node) {
     const idx = m.def.getLoopIndex(angle);
     if (idx !== m.loopIdx) { m.loopIdx = idx; _swapLoop(id, idx); }
-    const entry = _loopBank.LOOP_BANK[m.loopIdx];
-    if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+    // While an LFO drives this loop, it owns playbackRate (wobble) — don't fight it.
+    if (!_lfoTargets.has(m.def.id)) {
+      const entry = _loopBank.LOOP_BANK[m.loopIdx];
+      if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+    }
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);
@@ -319,6 +328,10 @@ function _applyLfoMod(lfoMod, tgt, s) {
   try {
     if (tgt.def.type === 'oscillator') {
       tgt.node.detune.rampTo(30 * s, 0.02);                          // +-30 cents vibrato
+    } else if (tgt.def.type === 'sampler') {
+      const entry = _loopBank.LOOP_BANK[tgt.loopIdx];
+      const base = entry ? _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value) : 1;
+      tgt.node.playbackRate = base * Math.pow(2, 0.5 * s);           // +-half-octave speed/pitch wobble
     } else if (tgt.def.subtype === 'filter') {
       const c = tgt.def.centerValue(t);
       tgt.node.frequency.rampTo(c * Math.pow(2, 0.5 * s), 0.02);     // +-half octave around cutoff
@@ -414,17 +427,22 @@ function applyRoutingPlan(plan) {
     if (ctrl.def.subtype === 'sequencer') nowSeq.add(_activeLinks[Number(cidStr)]);
     if (ctrl.def.subtype === 'lfo') nowLfo.add(_activeLinks[Number(cidStr)]);
   });
-  // Gate transitions: newly sequenced osc stops droning; un-sequenced resumes its drone.
-  nowSeq.forEach(oscId => {
-    if (!_sequencedOscs.has(oscId)) {
-      const m = activeModules[oscId];
-      if (m && m.node) { try { m.node.triggerRelease(); } catch (_) {} }
+  // Gate transitions: newly sequenced target goes quiet (osc stops droning, loop stops
+  // free-running so _onStep can stutter it); un-sequenced resumes.
+  nowSeq.forEach(tid => {
+    if (!_sequencedOscs.has(tid)) {
+      const m = activeModules[tid];
+      if (!m || !m.node) return;
+      if (m.def.type === 'sampler') { try { m.node.stop(); } catch (_) {} }
+      else { try { m.node.triggerRelease(); } catch (_) {} }
     }
   });
-  _sequencedOscs.forEach(oscId => {
-    if (!nowSeq.has(oscId)) {
-      const m = activeModules[oscId];
-      if (m && m.node) { try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {} }
+  _sequencedOscs.forEach(tid => {
+    if (!nowSeq.has(tid)) {
+      const m = activeModules[tid];
+      if (!m || !m.node) return;
+      if (m.def.type === 'sampler') { try { m.node.start('@1m'); } catch (_) {} }
+      else { try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {} }
     }
   });
   _sequencedOscs = nowSeq;
