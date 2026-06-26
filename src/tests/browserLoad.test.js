@@ -60,6 +60,7 @@ const SCRIPTS = [
   'src/utils/tonality.js',
   'src/utils/rhythmPatterns.js',
   'src/utils/cableAnim.js',
+  'src/data/loopBank.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',
   'src/components/visualEngine.js',
