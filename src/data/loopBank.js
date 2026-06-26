@@ -1,12 +1,15 @@
 // src/data/loopBank.js
-// Curated loop bank (downloaded by scripts/fetch-loops.sh). Pure data + rate math.
+// Curated DIVERSE loop bank (downloaded by scripts/fetch-loops.sh). Pure data + rate math.
+// bpm = the loop's native tempo (used to lock it to the Transport via playbackRate).
+// Loops whose native tempo is unknown use 110 (the default Transport BPM) so they play at
+// native speed by default; the Tempo puck still scales them.
 const LOOP_BANK = [
-  { name: 'LoFi 85',     file: 'assets/loops/LoFi_HipHop_85bpm_01.wav', bpm: 85,  category: 'drums' },
-  { name: 'BoomBap 90',  file: 'assets/loops/BoomBap_90bpm_01.wav',     bpm: 90,  category: 'drums' },
-  { name: 'Afro 100',    file: 'assets/loops/Afrobeats_100bpm_01.wav',  bpm: 100, category: 'drums' },
-  { name: 'House 124',   file: 'assets/loops/House_124bpm_01.wav',      bpm: 124, category: 'drums' },
-  { name: 'Trap 140',    file: 'assets/loops/Trap_140bpm_01.wav',       bpm: 140, category: 'drums' },
-  { name: 'FutBass 150', file: 'assets/loops/FutureBass_150bpm_01.wav', bpm: 150, category: 'synth' },
+  { name: 'Break 108', file: 'assets/loops/breakbeat_108.mp3', bpm: 108, category: 'drums' },
+  { name: 'House 140', file: 'assets/loops/house_140.wav',     bpm: 140, category: 'drums' },
+  { name: 'Funk Bass', file: 'assets/loops/bass_funk.wav',     bpm: 110, category: 'bass'  },
+  { name: 'Arp 130',   file: 'assets/loops/arp_130.ogg',       bpm: 130, category: 'synth' },
+  { name: 'Samba',     file: 'assets/loops/samba_perc.wav',    bpm: 110, category: 'perc'  },
+  { name: 'Piano',     file: 'assets/loops/piano_chords.wav',  bpm: 110, category: 'keys'  },
 ];
 
 function playbackRateFor(loopBpm, curBpm) {
