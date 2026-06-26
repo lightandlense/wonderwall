@@ -23,6 +23,17 @@ go/no-go on Phase 2.
 - Code reuses Gizmo Factory's calibration + detection wholesale; only the audio engine,
   patch graph, and rotation→param mapping are new.
 
+## Roadmap notes (future phases)
+
+- **Phase 6 (spec'd, approved 2026-06-26):** signal-shaped cables + reactive rings — purely
+  visual. See `planning/specs/reactable-wall-phase6-signal-cables-design.md`.
+- **Phase 7 (idea, not yet spec'd):** **Sampler / Loop puck** — a new module type (id 7,
+  `type: 'sampler'`) playing pre-recorded audio loops (drums/bass/textures) via a
+  `Tone.Player` (`loop: true`) synced to the Transport. Rotation selects the loop from a
+  small royalty-free, tempo-matched library (grouped by category). Routes to `master` like
+  oscillators, so effects + Phase 6 waveform cables apply for free (it would show its real
+  sample waveform). Main dependency: sourcing the loop assets. Build **after** Phase 6.
+
 ## What to avoid
 
 - Rewriting the homography solver or ArUco loop — port them from Gizmo Factory.
