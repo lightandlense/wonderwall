@@ -33,3 +33,24 @@ test('quantized note is a member of the scale (pitch class check)', () => {
   const pc = ((midi - 2) % 12 + 12) % 12;
   assert.ok(tonality.SCALE_MINOR_PENTATONIC.includes(pc));
 });
+
+test('scaleDegreeFreq: degree 0 is the root pitch class, in scale', () => {
+  const f = tonality.scaleDegreeFreq(261.63, 0, 0); // C root
+  const midi = Math.round(69 + 12 * Math.log2(f / 440));
+  assert.strictEqual(((midi - 0) % 12 + 12) % 12, 0); // pitch class C
+});
+
+test('scaleDegreeFreq: ascending degrees are monotonically higher', () => {
+  let prev = 0;
+  for (let d = 0; d < 10; d++) {
+    const f = tonality.scaleDegreeFreq(261.63, 0, d);
+    assert.ok(f > prev, `degree ${d} should be higher`);
+    prev = f;
+  }
+});
+
+test('scaleDegreeFreq: degree 5 is one octave above degree 0', () => {
+  const f0 = tonality.scaleDegreeFreq(261.63, 0, 0);
+  const f5 = tonality.scaleDegreeFreq(261.63, 0, 5);
+  assert.ok(Math.abs(f5 / f0 - 2) < 0.02, 'pentatonic has 5 notes/octave');
+});

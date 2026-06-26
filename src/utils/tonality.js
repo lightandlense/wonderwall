@@ -30,6 +30,17 @@ const tonality = {
     }
     return _midiToFreq(base); // unreachable for a 5-note scale, defensive
   },
+
+  // Ascending degree of the scale rooted at `root`, anchored near baseFreq's octave.
+  scaleDegreeFreq(baseFreq, root, degreeIndex) {
+    const intervals = SCALE_MINOR_PENTATONIC;     // [0,3,5,7,10]
+    const n = intervals.length;
+    const baseMidi = Math.round(_freqToMidi(baseFreq));
+    const rootMidi = 12 * Math.floor(baseMidi / 12) + root; // root in base octave
+    const octave = Math.floor(degreeIndex / n);
+    const semis = octave * 12 + intervals[((degreeIndex % n) + n) % n];
+    return _midiToFreq(rootMidi + semis);
+  },
 };
 
 if (typeof window !== 'undefined') window.tonality = tonality;
