@@ -145,8 +145,9 @@ function reconcileModules(markers) {
   });
 }
 
-let _lastChainKeys = {}; // genId -> last applied "a>b>c" string
-let _activeLinks = {};   // lfoId -> targetId currently connected
+let _lastChainKeys = {};   // genId -> last applied "a>b>c" string
+let _activeLinks = {};     // lfoId -> targetId currently connected
+let _lfoWindowCache = {};  // lfoId -> last target paramT the LFO window was set for
 
 // Map an effect/osc module to the Tone Param the LFO should modulate (option B).
 function _modTargetParam(mod) {
@@ -219,6 +220,7 @@ function applyRoutingPlan(plan) {
       const lfoMod = activeModules[lfoId];
       if (lfoMod && lfoMod.node) { try { lfoMod.node.disconnect(); } catch (_) {} }
       delete _activeLinks[lfoId];
+      delete _lfoWindowCache[lfoId];
     }
   });
   // establish / refresh links
@@ -226,13 +228,19 @@ function applyRoutingPlan(plan) {
     const lfoMod = activeModules[l.lfoId];
     const tgtMod = activeModules[l.targetId];
     if (!lfoMod || !lfoMod.node || !tgtMod || !tgtMod.node) return;
+    const tNow = tgtMod.def.getParamT(tgtMod.smoother.get());
     if (_activeLinks[l.lfoId] !== l.targetId) {
       _setLfoWindow(lfoMod, tgtMod);
       try { lfoMod.node.connect(_modTargetParam(tgtMod)); } catch (_) {}
       _activeLinks[l.lfoId] = l.targetId;
+      _lfoWindowCache[l.lfoId] = tNow;
       console.log(`[audio] LFO ${l.lfoId} -> module ${l.targetId}`);
-    } else {
-      _setLfoWindow(lfoMod, tgtMod); // keep window centered as the target is turned (option B, live)
+    } else if (_lfoWindowCache[l.lfoId] === undefined || Math.abs(_lfoWindowCache[l.lfoId] - tNow) > 0.01) {
+      // Refresh the window ONLY when the target knob actually moved. Rewriting
+      // lfo.min/max every idle frame piles up Tone param-automation events and
+      // eventually freezes the audio thread (the reported LFO freeze).
+      _setLfoWindow(lfoMod, tgtMod);
+      _lfoWindowCache[l.lfoId] = tNow;
     }
   });
 
