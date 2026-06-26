@@ -36,8 +36,14 @@ function makeSandbox() {
   class LFO extends Node { constructor() { super(); this.frequency = param(); } start() { return this; } set min(v) {} set max(v) {} }
   class Loop { constructor(cb) { this.cb = cb; } start() { return this; } }
   class Meter extends Node { constructor() { super(); } getValue() { return -100; } }
-  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, start: async () => {},
-    Transport: { bpm: { value: 120 }, start() {}, stop() {} } };
+  class Player extends Node {
+    constructor() { super(); this.playbackRate = 1; this.buffer = null; synths.push(this); }
+    sync() { return this; } start() { return this; } stop() { return this; }
+  }
+  const ToneAudioBuffer = { fromUrl: async () => ({ toArray: () => new Float32Array([0, 0.5, -0.5, 1, -1, 0.25]), duration: 2 }) };
+  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
+    start: async () => {},
+    Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 
   // BFS over audio edges: does any oscillator reach Destination?
   sandbox.__synthReachesDest = () => synths.some(s => {
@@ -171,4 +177,30 @@ test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
   const rate = vm.runInContext('getLfoRate(4)', ctx);
   assert.strictEqual(typeof rate, 'number');
   assert.ok(rate >= 0.1 && rate <= 8, 'lfo rate within design range');
+});
+
+test('Loop + Tempo pucks: play through master, expose peaks, set tempo', async () => {
+  const ctx = makeSandbox();
+  loadAll(ctx);
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
+  ctx.__fakeCtx = fakeCtx;
+  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
+  vm.runInContext(`window.onMarkersDetected = function (d) {
+    reconcileModules(d); const a = getActiveModules();
+    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
+    updateModulation();
+    const edges = routingGraph.getEdges(p, a, { w: 1280, h: 720 });
+    visualEngine.draw(d, edges);
+  };`, ctx);
+  await vm.runInContext('initAudio()', ctx);
+
+  const loop = { id: 7, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const tempo = { id: 8, wx: 600, wy: 600, angle: 3, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([loop, tempo]);
+
+  assert.ok(ctx.__synthReachesDest(), 'loop player should reach the master/destination');
+  const peaks = vm.runInContext('getLoopPeaks(7)', ctx);
+  assert.ok(Array.isArray(peaks) && peaks.length > 0, 'loop exposes a peak envelope');
+  assert.strictEqual(vm.runInContext('typeof getModuleLevel(7)', ctx), 'number');
+  assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]); });
 });

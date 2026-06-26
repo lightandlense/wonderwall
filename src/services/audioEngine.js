@@ -16,6 +16,9 @@ let _tonality = null; // { active, root, scale } | null
 const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
 const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
+const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
+const LOOP_PEAKS = {};     // file -> number[] peak envelope
 
 // Sequencer clock state
 let _step = 0;             // current 16th-note step (0..STEPS-1)
@@ -42,6 +45,7 @@ let master = null;
 async function initAudio() {
   if (audioInitialized) return;
   await Tone.start();
+  await preloadLoops();                         // decode loop buffers + peak envelopes
   master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
   Tone.Transport.bpm.value = 110;               // BPM
   _step = 0;
@@ -49,6 +53,21 @@ async function initAudio() {
   Tone.Transport.start();
   audioInitialized = true;
   console.log('[audio] AudioContext started');
+}
+
+// Decode every loop in the bank once and precompute its peak envelope for the cable view.
+async function preloadLoops() {
+  for (const entry of _loopBank.LOOP_BANK) {
+    try {
+      const buf = await Tone.ToneAudioBuffer.fromUrl(entry.file);
+      LOOP_BUFFERS[entry.file] = buf;
+      const data = (typeof buf.toArray === 'function') ? buf.toArray(0) : null;
+      LOOP_PEAKS[entry.file] = data ? _cableAnim.peakEnvelope(data, 200) : [];
+    } catch (e) {
+      console.warn('[audio] loop load failed:', entry.file);
+      LOOP_PEAKS[entry.file] = [];
+    }
+  }
 }
 
 // Fired once per 16th note by the Transport loop: each active sequencer fires
@@ -106,6 +125,7 @@ function _addModule(id, marker) {
 
   let node = null;
   let meter = null;
+  let loopIdx = -1;
 
   if (def.type === 'oscillator') {
     // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
@@ -125,16 +145,29 @@ function _addModule(id, marker) {
     def.applyParam(node, def.getParamT(smoother.get()));
     meter = new Tone.Meter({ smoothing: 0.8 });
     node.connect(meter);            // passive tap
+  } else if (def.type === 'sampler') {
+    loopIdx = def.getLoopIndex(smoother.get());
+    const entry = _loopBank.LOOP_BANK[loopIdx];
+    const buf = LOOP_BUFFERS[entry.file];
+    if (buf) {
+      const player = new Tone.Player({ url: buf, loop: true });
+      player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+      player.sync().start('@1m');   // launch on the next bar, locked to the Transport
+      node = player;
+      meter = new Tone.Meter({ smoothing: 0.8 });
+      player.connect(meter);
+    }
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
-    node = null;                    // tonality / volume have no audio node
+    node = null;                    // tonality / volume / tempo have no audio node
   }
 
   activeModules[id] = {
     def,
     node,
     meter,
+    loopIdx,
     smoother,
     missCount: 0,
     lastPos: { wx: marker.wx, wy: marker.wy },
@@ -154,6 +187,7 @@ function _removeModule(id) {
     // Dispose after the release envelope finishes (~300ms)
     setTimeout(() => { try { m.node.dispose(); } catch (_) {} }, 500);
   } else if (m.node) {
+    try { if (typeof m.node.stop === 'function') m.node.stop(); } catch (_) {}
     try { m.node.dispose(); } catch (_) {}
   }
 
@@ -180,9 +214,52 @@ function _updateModule(id, marker) {
     // While an LFO drives this effect, its rotation feeds the LFO window instead
     // (handled in applyRoutingPlan), so skip the direct ramp to avoid fighting it.
     m.def.applyParam(m.node, m.def.getParamT(angle));
+  } else if (m.def.type === 'sampler' && m.node) {
+    const idx = m.def.getLoopIndex(angle);
+    if (idx !== m.loopIdx) { m.loopIdx = idx; _swapLoop(id, idx); }
+    const entry = _loopBank.LOOP_BANK[m.loopIdx];
+    if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+  } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
+    const bpm = m.def.getBpm(angle);
+    Tone.Transport.bpm.rampTo(bpm, 0.1);
+    _applyLoopRates(bpm);
   } else if (m.def.type === 'controller' && m.node) {
     m.node.frequency.rampTo(m.def.getRateHz(angle), 0.05);
   }
+}
+
+// Swap a loop puck's buffer on the next bar (keeps node identity so routing stays wired).
+function _swapLoop(id, idx) {
+  const m = activeModules[id];
+  if (!m || !m.node) return;
+  const entry = _loopBank.LOOP_BANK[idx];
+  const buf = entry && LOOP_BUFFERS[entry.file];
+  if (!buf) return;
+  Tone.Transport.scheduleOnce(() => {
+    try {
+      m.node.buffer = buf;
+      m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+    } catch (_) {}
+  }, '@1m');
+}
+
+// Re-rate every active loop when the tempo changes (keeps loops locked to the new BPM).
+function _applyLoopRates(bpm) {
+  Object.keys(activeModules).forEach(k => {
+    const m = activeModules[k];
+    if (m && m.def.type === 'sampler' && m.node) {
+      const entry = _loopBank.LOOP_BANK[m.loopIdx];
+      if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, bpm);
+    }
+  });
+}
+
+// Peak envelope for a sampler's current loop (read by the visual layer). [] if none.
+function getLoopPeaks(srcId) {
+  const m = activeModules[srcId];
+  if (!m || m.def.type !== 'sampler') return [];
+  const entry = _loopBank.LOOP_BANK[m.loopIdx];
+  return (entry && LOOP_PEAKS[entry.file]) || [];
 }
 
 // Called each detection frame with the currently visible module markers.
@@ -366,3 +443,4 @@ window.getSeqStep         = getSeqStep;
 window.getSeqPulses       = getSeqPulses;
 window.getModuleLevel     = getModuleLevel;
 window.getLfoRate         = getLfoRate;
+window.getLoopPeaks       = getLoopPeaks;

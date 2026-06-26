@@ -14,8 +14,6 @@ function _arcT(angle) {
 // Exponential map helper for [0,1] -> [lo,hi].
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
-const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-
 const MODULE_REGISTRY = {
   // ID 0: Oscillator — rotation controls pitch (continuous; tonality applied by audioEngine)
   0: {
@@ -85,10 +83,14 @@ const MODULE_REGISTRY = {
     id: 7, name: 'Loop', type: 'sampler', color: '#7CFFB2', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
     getLoopIndex(angle) {
-      const n = _loopBank.LOOP_BANK.length;
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const n = lb.LOOP_BANK.length;
       return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
     },
-    getName(angle) { return _loopBank.LOOP_BANK[this.getLoopIndex(angle)].name; },
+    getName(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      return lb.LOOP_BANK[this.getLoopIndex(angle)].name;
+    },
   },
 
   // ID 8: Tempo — global; rotation sets the Transport BPM (70..160)
