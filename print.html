@@ -45,7 +45,7 @@
     Print at <strong>10 cm+</strong> per marker for reliable detection at arm's length.<br>
     <strong>Corner markers (10, 11, 13, 18)</strong> are projected by the app when running
     with a projector — only print these for non-projector use.<br>
-    <strong>Puck markers (0–6)</strong> go on your physical pucks or taped to paper.<br>
+    <strong>Puck markers (0–8)</strong> go on your physical pucks or taped to paper.<br>
     <em>This page is fully self-contained — it needs no internet and no other files, so it
     prints correctly even when copied to another computer on its own.</em>
   </p>
@@ -100,7 +100,7 @@
     }
 
     // Puck markers — the audio modules
-    const PUCK_IDS = [0, 1, 2, 3, 4, 5, 6];
+    const PUCK_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
     const PUCK_LABELS = {
       0: 'Oscillator — turn for pitch',
       1: 'Filter — turn for cutoff; place near the center path',
@@ -109,6 +109,8 @@
       4: 'LFO — turn for rate; place near a puck to modulate it',
       5: 'Tonality — turn to pick the key',
       6: 'Sequencer — turn to pick a rhythm; place near an oscillator',
+      7: 'Loop — turn to pick a loop; plays tempo-locked audio',
+      8: 'Tempo — turn to set BPM (70–160); speeds up loops + sequencer',
     };
 
     // Calibration corner markers — projected by the app, only print for non-projector
