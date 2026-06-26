@@ -2,7 +2,10 @@
 // Pure, per-frame routing planner. Replaces patchGraph.js.
 // Produces a RoutingPlan that audioEngine.applyRoutingPlan() executes.
 
-const geometry = (typeof require === 'function') ? require('../utils/geometry.js') : window.geometry;
+// Named _geom (not `geometry`) to avoid colliding with geometry.js's top-level
+// `const geometry` — classic browser <script>s share one lexical scope, so two
+// top-level `const geometry` declarations are a redeclaration SyntaxError.
+const _geom = (typeof require === 'function') ? require('../utils/geometry.js') : window.geometry;
 
 const CONSTANTS = {
   PATCH_FRAC: 0.35,     // osc<->output connect distance as fraction of screen width
@@ -41,7 +44,7 @@ function buildRawPlan(modules, screenWidth, prevMembership) {
     // effects on the cable gen->out
     const onCable = [];
     effects.forEach(e => {
-      const { dist, t } = geometry.pointToSegment(e.wx, e.wy, gen.wx, gen.wy, out.wx, out.wy);
+      const { dist, t } = _geom.pointToSegment(e.wx, e.wy, gen.wx, gen.wy, out.wx, out.wy);
       if (t <= 0 || t >= 1) return;
       const wasMember = prev.has(`${gen.id}:${e.id}`);
       const band = wasMember ? CONSTANTS.BAND_KEEP : CONSTANTS.BAND_ADD;
