@@ -21,6 +21,7 @@ let _step = 0;             // current 16th-note step (0..STEPS-1)
 let _stepLoop = null;      // Tone.Loop instance
 let _seqIndex = {};        // sequencerId -> melodic-walk counter
 let _sequencedOscs = new Set(); // oscillator ids currently gated by a sequencer
+let _seqPulses = {};       // sequencerId -> performance.now() of last hit (for cable animation)
 
 // Oscillator frequency with optional scale quantization.
 function _oscFreq(def, angle) {
@@ -61,6 +62,7 @@ function _onStep(time) {
     if (!osc || osc.def.type !== 'oscillator' || !osc.node) return;
     const pat = _rhythm.PATTERNS[ctrl.def.getPatternIndex(ctrl.smoother.get())];
     if (!pat || !pat.steps[_step]) return;
+    _seqPulses[cid] = (typeof performance !== 'undefined') ? performance.now() : 0; // for cable pulse anim
     let freq;
     if (_tonality && _tonality.active) {
       const idx = (_seqIndex[cid] || 0);
@@ -74,6 +76,7 @@ function _onStep(time) {
 }
 
 function getSeqStep() { return _step; }
+function getSeqPulses() { return _seqPulses; }
 
 function _addModule(id, marker) {
   const def = MODULE_REGISTRY[id];
@@ -333,3 +336,4 @@ window.getActiveModules   = getActiveModules;
 window.applyRoutingPlan   = applyRoutingPlan;
 window.updateModulation   = updateModulation;
 window.getSeqStep         = getSeqStep;
+window.getSeqPulses       = getSeqPulses;

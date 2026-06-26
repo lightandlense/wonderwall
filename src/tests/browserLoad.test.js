@@ -57,6 +57,8 @@ function makeSandbox() {
 const SCRIPTS = [
   'src/utils/angleSmoothing.js',
   'src/utils/tonality.js',
+  'src/utils/rhythmPatterns.js',
+  'src/utils/cableAnim.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',
   'src/components/visualEngine.js',
@@ -74,7 +76,7 @@ test('all browser scripts load in one shared scope without redeclaration errors'
   const ctx = makeSandbox();
   assert.doesNotThrow(() => loadAll(ctx), 'a top-level const/let/class collides across scripts');
   // Globals the frame loop depends on must be exposed.
-  for (const name of ['reconcileModules', 'getActiveModules', 'applyRoutingPlan', 'routingGraph', 'visualEngine', 'MODULE_REGISTRY']) {
+  for (const name of ['reconcileModules', 'getActiveModules', 'applyRoutingPlan', 'routingGraph', 'visualEngine', 'MODULE_REGISTRY', 'getSeqPulses']) {
     assert.ok(ctx[name] !== undefined, `global '${name}' not exposed`);
   }
 });
