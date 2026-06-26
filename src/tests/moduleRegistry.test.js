@@ -7,14 +7,29 @@ const tonality = require('../utils/tonality.js');
 global.tonality = tonality; // registry uses global tonality in browser; mirror for Node
 const MODULE_REGISTRY = require('../services/moduleRegistry.js');
 
-test('registry has the six Phase 3 modules with correct types', () => {
+test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[0].type, 'oscillator');
   assert.strictEqual(MODULE_REGISTRY[1].type, 'effect');
   assert.strictEqual(MODULE_REGISTRY[1].subtype, 'filter');
   assert.strictEqual(MODULE_REGISTRY[2].subtype, 'delay');
-  assert.strictEqual(MODULE_REGISTRY[3].type, 'output');
+  assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
   assert.strictEqual(MODULE_REGISTRY[4].subtype, 'lfo');
   assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
+});
+
+test('ID 3 is now a global Volume control; ID 6 is the Sequencer controller', () => {
+  assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
+  assert.strictEqual(MODULE_REGISTRY[3].subtype, 'volume');
+  assert.strictEqual(MODULE_REGISTRY[6].type, 'controller');
+  assert.strictEqual(MODULE_REGISTRY[6].subtype, 'sequencer');
+});
+
+test('Sequencer getPatternIndex spans the bank across rotation', () => {
+  const seq = MODULE_REGISTRY[6];
+  const lo = seq.getPatternIndex(-Math.PI / 4);  // paramT ~ 0
+  const hi = seq.getPatternIndex(Math.PI / 4);   // paramT ~ 1
+  assert.ok(hi >= lo);
+  assert.ok(lo >= 0);
 });
 
 test('calibration IDs are NOT in the registry', () => {

@@ -42,9 +42,10 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.feedback.rampTo(this.centerValue(t), 0.05); },
   },
 
-  // ID 3: Output / master — rotation controls overall volume
+  // ID 3: Volume — global master-volume control (no longer in the signal path;
+  // the master output is the always-on center hub)
   3: {
-    id: 3, name: 'Output', type: 'output', color: '#ffcc44', paramLabel: 'Volume',
+    id: 3, name: 'Volume', type: 'global', subtype: 'volume', color: '#ffcc44', paramLabel: 'Volume',
     getParamT(angle) { return _arcT(angle); },
     getVolDb(angle) { return -40 + _arcT(angle) * 40; }, // -40 dB .. 0 dB
   },
@@ -63,6 +64,17 @@ const MODULE_REGISTRY = {
     getRoot(angle) {
       const tn = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
       return tn.rootFromT(_arcT(angle));
+    },
+  },
+
+  // ID 6: Sequencer — controller; rotation selects a preset rhythm pattern
+  6: {
+    id: 6, name: 'Sequencer', type: 'controller', subtype: 'sequencer', color: '#ffb74d', paramLabel: 'Pattern',
+    getParamT(angle) { return _arcT(angle); },
+    getPatternIndex(angle) {
+      const rp = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
+      const n = rp.PATTERNS.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
     },
   },
 };
