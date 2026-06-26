@@ -29,12 +29,14 @@ function makeSandbox() {
     toDestination() { this._out.add(DEST); return this; }
     dispose() {}
   }
-  class Synth extends Node { constructor() { super(); this.frequency = param(); this.detune = param(); synths.push(this); } triggerAttack() {} triggerRelease() {} }
+  class Synth extends Node { constructor() { super(); this.frequency = param(); this.detune = param(); synths.push(this); } triggerAttack() {} triggerRelease() {} triggerAttackRelease() {} }
   class Volume extends Node { constructor() { super(); this.volume = param(); } }
   class Filter extends Node { constructor() { super(); this.frequency = param(); } }
   class FeedbackDelay extends Node { constructor() { super(); this.feedback = param(); } }
   class LFO extends Node { constructor() { super(); this.frequency = param(); } start() { return this; } set min(v) {} set max(v) {} }
-  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, start: async () => {} };
+  class Loop { constructor(cb) { this.cb = cb; } start() { return this; } }
+  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, start: async () => {},
+    Transport: { bpm: { value: 120 }, start() {}, stop() {} } };
 
   // BFS over audio edges: does any oscillator reach Destination?
   sandbox.__synthReachesDest = () => synths.some(s => {
@@ -77,7 +79,7 @@ test('all browser scripts load in one shared scope without redeclaration errors'
   }
 });
 
-test('the per-frame handler does not throw (audio off and on, empty + osc/out markers)', () => {
+test('the per-frame handler does not throw (audio off and on, empty + osc/out markers)', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
   const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : () => {}) });
@@ -100,13 +102,20 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
   const filt = { id: 1, wx: 200, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const lfo = { id: 4, wx: 210, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
 
+  ctx.onMarkersDetected([]);          // audio off, no markers
+  ctx.onMarkersDetected([osc, out]);  // audio off, markers present
+  await vm.runInContext('initAudio()', ctx); // await so audioInitialized is set before the scenarios run
+
   assert.doesNotThrow(() => {
-    ctx.onMarkersDetected([]);          // audio off, no markers
-    ctx.onMarkersDetected([osc, out]);  // audio off, markers present
-    vm.runInContext('initAudio()', ctx);
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, out]); // audio on, debounce commits chain
     // LFO + osc + filter + output (the combo that froze): many frames, must stay clean
     for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, filt, out, lfo]);
+    // Sequencer + oscillator: exercises sequencer link, gating transitions, melodic walk path
+    const seqM = { id: 6, wx: 110, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+    const ton5 = { id: 5, wx: 600, wy: 600, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+    for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, seqM]);        // gates the oscillator
+    for (let i = 0; i < 6; i++) ctx.onMarkersDetected([osc, seqM, ton5]);   // melodic walk active
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc]);               // sequencer removed -> resume drone
   });
 });
 

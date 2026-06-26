@@ -14,6 +14,13 @@ let audioInitialized = false;
 // Global tonality state, set by applyRoutingPlan from the routing plan.
 let _tonality = null; // { active, root, scale } | null
 const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
+const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
+
+// Sequencer clock state
+let _step = 0;             // current 16th-note step (0..STEPS-1)
+let _stepLoop = null;      // Tone.Loop instance
+let _seqIndex = {};        // sequencerId -> melodic-walk counter
+let _sequencedOscs = new Set(); // oscillator ids currently gated by a sequencer
 
 // Oscillator frequency with optional scale quantization.
 function _oscFreq(def, angle) {
@@ -34,9 +41,39 @@ async function initAudio() {
   if (audioInitialized) return;
   await Tone.start();
   master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
+  Tone.Transport.bpm.value = 110;               // BPM
+  _step = 0;
+  _stepLoop = new Tone.Loop((time) => { _onStep(time); }, '16n').start(0);
+  Tone.Transport.start();
   audioInitialized = true;
   console.log('[audio] AudioContext started');
 }
+
+// Fired once per 16th note by the Transport loop: each active sequencer fires
+// its target oscillator on hit steps.
+function _onStep(time) {
+  _step = (_step + 1) % _rhythm.STEPS;
+  Object.keys(_activeLinks).forEach(cidStr => {
+    const cid = Number(cidStr);
+    const ctrl = activeModules[cid];
+    if (!ctrl || ctrl.def.subtype !== 'sequencer') return;
+    const osc = activeModules[_activeLinks[cid]];
+    if (!osc || osc.def.type !== 'oscillator' || !osc.node) return;
+    const pat = _rhythm.PATTERNS[ctrl.def.getPatternIndex(ctrl.smoother.get())];
+    if (!pat || !pat.steps[_step]) return;
+    let freq;
+    if (_tonality && _tonality.active) {
+      const idx = (_seqIndex[cid] || 0);
+      freq = _tonalityUtil.scaleDegreeFreq(osc.def.getFreq(osc.smoother.get()), _tonality.root, idx);
+      _seqIndex[cid] = idx + 1;
+    } else {
+      freq = _oscFreq(osc.def, osc.smoother.get());
+    }
+    try { osc.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
+  });
+}
+
+function getSeqStep() { return _step; }
 
 function _addModule(id, marker) {
   const def = MODULE_REGISTRY[id];
@@ -183,8 +220,9 @@ function updateModulation() {
   Object.keys(_activeLinks).forEach(lfoIdStr => {
     const lfoId = Number(lfoIdStr);
     const lfoMod = activeModules[lfoId];
+    if (!lfoMod || lfoMod.def.subtype !== 'lfo') return; // sequencers handled by _onStep
     const tgt = activeModules[_activeLinks[lfoId]];
-    if (!lfoMod || !tgt || !tgt.node) return;
+    if (!tgt || !tgt.node) return;
     const rate = lfoMod.def.getRateHz(lfoMod.smoother.get());
     _lfoPhase[lfoId] = ((_lfoPhase[lfoId] || 0) + 2 * Math.PI * rate * dt) % (2 * Math.PI);
     _applyLfoMod(lfoMod, tgt, Math.sin(_lfoPhase[lfoId]));
@@ -224,31 +262,51 @@ function applyRoutingPlan(plan) {
   // generators that vanished from the plan: drop their cached key
   Object.keys(_lastChainKeys).forEach(g => { if (!seenGen.has(Number(g))) delete _lastChainKeys[g]; });
 
-  // ---- control links (JS-driven; no audio-graph connections) ----
-  // Just track which LFO drives which target; updateModulation() does the work.
-  const desired = {}; plan.controlLinks.forEach(l => { desired[l.lfoId] = l.targetId; });
+  // ---- controller links (JS-driven; no audio-graph connections) ----
+  // Track which controller drives which target; _onStep / updateModulation act on it.
+  const desired = {}; plan.controlLinks.forEach(l => { desired[l.controllerId] = l.targetId; });
 
-  Object.keys(_activeLinks).forEach(lfoIdStr => {
-    const lfoId = Number(lfoIdStr);
-    if (desired[lfoId] !== _activeLinks[lfoId]) {
-      delete _activeLinks[lfoId];
-      delete _lfoPhase[lfoId];
-      // target resumes rotation control next frame (it leaves _lfoTargets below)
+  Object.keys(_activeLinks).forEach(cidStr => {
+    const cid = Number(cidStr);
+    if (desired[cid] !== _activeLinks[cid]) {
+      delete _activeLinks[cid]; delete _lfoPhase[cid]; delete _seqIndex[cid];
     }
   });
   plan.controlLinks.forEach(l => {
-    const lfoMod = activeModules[l.lfoId];
-    const tgtMod = activeModules[l.targetId];
-    if (!lfoMod || !tgtMod || !tgtMod.node) return;
-    if (_activeLinks[l.lfoId] !== l.targetId) {
-      _activeLinks[l.lfoId] = l.targetId;
-      _lfoPhase[l.lfoId] = 0;
-      console.log(`[audio] LFO ${l.lfoId} -> module ${l.targetId}`);
+    const ctrl = activeModules[l.controllerId];
+    const tgt = activeModules[l.targetId];
+    if (!ctrl || !tgt || !tgt.node) return;
+    if (_activeLinks[l.controllerId] !== l.targetId) {
+      _activeLinks[l.controllerId] = l.targetId;
+      if (ctrl.def.subtype === 'lfo') _lfoPhase[l.controllerId] = 0;
+      if (ctrl.def.subtype === 'sequencer') _seqIndex[l.controllerId] = 0;
+      console.log(`[audio] ${ctrl.def.subtype} ${l.controllerId} -> module ${l.targetId}`);
     }
   });
 
-  // refresh the set of LFO-driven targets so _updateModule stops fighting the LFO
-  _lfoTargets = new Set(Object.values(_activeLinks));
+  // Recompute which oscillators are sequencer-gated and which modules an LFO drives.
+  const nowSeq = new Set(), nowLfo = new Set();
+  Object.keys(_activeLinks).forEach(cidStr => {
+    const ctrl = activeModules[Number(cidStr)];
+    if (!ctrl) return;
+    if (ctrl.def.subtype === 'sequencer') nowSeq.add(_activeLinks[Number(cidStr)]);
+    if (ctrl.def.subtype === 'lfo') nowLfo.add(_activeLinks[Number(cidStr)]);
+  });
+  // Gate transitions: newly sequenced osc stops droning; un-sequenced resumes its drone.
+  nowSeq.forEach(oscId => {
+    if (!_sequencedOscs.has(oscId)) {
+      const m = activeModules[oscId];
+      if (m && m.node) { try { m.node.triggerRelease(); } catch (_) {} }
+    }
+  });
+  _sequencedOscs.forEach(oscId => {
+    if (!nowSeq.has(oscId)) {
+      const m = activeModules[oscId];
+      if (m && m.node) { try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {} }
+    }
+  });
+  _sequencedOscs = nowSeq;
+  _lfoTargets = nowLfo;
 }
 
 // Returns smoothed angle [0, 2π) for a module, or null if not active.
@@ -274,3 +332,4 @@ window.getModuleParam     = getModuleParam;
 window.getActiveModules   = getActiveModules;
 window.applyRoutingPlan   = applyRoutingPlan;
 window.updateModulation   = updateModulation;
+window.getSeqStep         = getSeqStep;
