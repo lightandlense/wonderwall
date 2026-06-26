@@ -57,17 +57,23 @@ async function initAudio() {
 
 // Decode every loop in the bank once and precompute its peak envelope for the cable view.
 async function preloadLoops() {
+  console.log('[audio] preloadLoops: Tone.ToneAudioBuffer =', typeof Tone.ToneAudioBuffer,
+    '| fromUrl =', Tone.ToneAudioBuffer && typeof Tone.ToneAudioBuffer.fromUrl);
   for (const entry of _loopBank.LOOP_BANK) {
     try {
       const buf = await Tone.ToneAudioBuffer.fromUrl(entry.file);
       LOOP_BUFFERS[entry.file] = buf;
-      const data = (typeof buf.toArray === 'function') ? buf.toArray(0) : null;
+      let data = null;
+      try { data = (typeof buf.toArray === 'function') ? buf.toArray(0) : null; }
+      catch (pe) { console.warn('[audio] peak calc failed (audio still ok):', entry.file, pe && pe.message); }
       LOOP_PEAKS[entry.file] = data ? _cableAnim.peakEnvelope(data, 200) : [];
+      console.log('[audio] loop loaded:', entry.file, '| dur', buf && buf.duration, '| peaks', LOOP_PEAKS[entry.file].length);
     } catch (e) {
-      console.warn('[audio] loop load failed:', entry.file);
+      console.error('[audio] loop load FAILED:', entry.file, '|', e && (e.message || e));
       LOOP_PEAKS[entry.file] = [];
     }
   }
+  console.log('[audio] preloadLoops done. buffers loaded:', Object.keys(LOOP_BUFFERS).length, '/', _loopBank.LOOP_BANK.length);
 }
 
 // Fired once per 16th note by the Transport loop: each active sequencer fires
@@ -149,6 +155,7 @@ function _addModule(id, marker) {
     loopIdx = def.getLoopIndex(smoother.get());
     const entry = _loopBank.LOOP_BANK[loopIdx];
     const buf = LOOP_BUFFERS[entry.file];
+    console.log('[audio] add sampler: loop', loopIdx, entry.file, '| buffer?', !!buf);
     if (buf) {
       const player = new Tone.Player({ url: buf, loop: true });
       player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
@@ -156,6 +163,9 @@ function _addModule(id, marker) {
       node = player;
       meter = new Tone.Meter({ smoothing: 0.8 });
       player.connect(meter);
+      console.log('[audio] sampler player created + synced, rate', player.playbackRate);
+    } else {
+      console.warn('[audio] sampler: NO BUFFER for', entry.file, '- no sound will play');
     }
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
