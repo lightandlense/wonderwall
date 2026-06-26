@@ -21,6 +21,16 @@ const visualEngine = (() => {
     visCtx.clearRect(0, 0, W, H);
     debugCtx.clearRect(0, 0, W, H);
 
+    // Always-on central output hub (the master sink lives at the wall center)
+    const cx = W / 2, cy = H / 2;
+    visCtx.save();
+    visCtx.shadowColor = '#88ffcc'; visCtx.shadowBlur = 30;
+    visCtx.fillStyle = 'rgba(136,255,204,0.9)';
+    visCtx.beginPath(); visCtx.arc(cx, cy, 10, 0, 2 * Math.PI); visCtx.fill();
+    visCtx.strokeStyle = 'rgba(136,255,204,0.35)'; visCtx.lineWidth = 2;
+    visCtx.beginPath(); visCtx.arc(cx, cy, 18, 0, 2 * Math.PI); visCtx.stroke();
+    visCtx.restore();
+
     // Draw edges beneath module rings so rings appear on top
     if (edges && edges.length > 0) {
       _drawEdges(edges);
@@ -87,6 +97,24 @@ const visualEngine = (() => {
       visCtx.textAlign = 'center';
       visCtx.fillText(`${def.paramLabel}: ${paramPct}%`, wx, wy + ringR + 18);
       visCtx.restore();
+
+      // Sequencer: ring of 16 step dots + sweeping playhead + pattern name
+      if (def.subtype === 'sequencer' && window.rhythmPatterns) {
+        const pat = window.rhythmPatterns.PATTERNS[def.getPatternIndex(angle)];
+        const step = (typeof getSeqStep === 'function') ? getSeqStep() : -1;
+        const rr = ringR + 22;
+        for (let s = 0; s < 16; s++) {
+          const a = -Math.PI / 2 + (s / 16) * 2 * Math.PI;
+          const dx = wx + Math.cos(a) * rr, dy = wy + Math.sin(a) * rr;
+          const on = pat && pat.steps[s];
+          visCtx.beginPath();
+          visCtx.fillStyle = s === step ? '#ffffff' : (on ? def.color : 'rgba(255,255,255,0.18)');
+          visCtx.arc(dx, dy, s === step ? 4 : (on ? 3.5 : 2), 0, 2 * Math.PI);
+          visCtx.fill();
+        }
+        visCtx.fillStyle = 'rgba(255,255,255,0.6)'; visCtx.font = '10px monospace'; visCtx.textAlign = 'center';
+        visCtx.fillText(pat ? pat.name : '', wx, wy + ringR + 32);
+      }
     });
 
     // Tonality HUD pill (top-right) when a Tonality puck is present
@@ -243,14 +271,15 @@ const visualEngine = (() => {
   // 'audio' = green glowing cable; 'control' = purple dotted modulation link.
   function _drawEdges(edges) {
     edges.forEach(edge => {
-      const { fromPos, toPos, kind, connected, alpha } = edge;
+      const { fromPos, toPos, kind, connected, alpha, ctrl } = edge;
 
       visCtx.save();
       if (kind === 'control') {
+        const amber = ctrl === 'sequencer'; // sequencer trigger = amber; LFO = purple
         visCtx.globalAlpha = alpha * 0.9;
-        visCtx.strokeStyle = '#c98bff';
+        visCtx.strokeStyle = amber ? '#ffb74d' : '#c98bff';
         visCtx.lineWidth   = 2;
-        visCtx.shadowColor = '#c98bff';
+        visCtx.shadowColor = amber ? '#ffb74d' : '#c98bff';
         visCtx.shadowBlur  = 12;
         visCtx.setLineDash([3, 9]);
       } else {
@@ -271,7 +300,7 @@ const visualEngine = (() => {
       if (connected) {
         const mx = (fromPos.x + toPos.x) / 2;
         const my = (fromPos.y + toPos.y) / 2;
-        visCtx.fillStyle  = kind === 'control' ? '#e0b3ff' : '#88ffcc';
+        visCtx.fillStyle  = kind === 'control' ? (ctrl === 'sequencer' ? '#ffd9a0' : '#e0b3ff') : '#88ffcc';
         visCtx.shadowBlur = 20;
         visCtx.beginPath();
         visCtx.arc(mx, my, 4, 0, 2 * Math.PI);
