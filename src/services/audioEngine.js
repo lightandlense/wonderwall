@@ -15,6 +15,7 @@ let audioInitialized = false;
 let _tonality = null; // { active, root, scale } | null
 const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
 const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
+const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 
 // Sequencer clock state
 let _step = 0;             // current 16th-note step (0..STEPS-1)
@@ -78,6 +79,24 @@ function _onStep(time) {
 function getSeqStep() { return _step; }
 function getSeqPulses() { return _seqPulses; }
 
+// Live output level [0,1] for a module's ring pulse + waveform amplitude (0 if no meter).
+function getModuleLevel(id) {
+  const m = activeModules[id];
+  if (!m || !m.meter) return 0;
+  let db;
+  try { db = m.meter.getValue(); } catch (_) { return 0; }
+  if (Array.isArray(db)) db = db[0];      // stereo meter -> use first channel
+  return _cableAnim.meterToUnit(db);
+}
+// LFO modulation rate in Hz for a control cable's scroll speed (default 1).
+function getLfoRate(srcId) {
+  const m = activeModules[srcId];
+  if (m && m.def && typeof m.def.getRateHz === 'function') {
+    return m.def.getRateHz(m.smoother.get());
+  }
+  return 1;
+}
+
 function _addModule(id, marker) {
   const def = MODULE_REGISTRY[id];
   if (!def) return;
@@ -86,6 +105,7 @@ function _addModule(id, marker) {
   smoother.update(marker.angle, performance.now());
 
   let node = null;
+  let meter = null;
 
   if (def.type === 'oscillator') {
     // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
@@ -98,9 +118,13 @@ function _addModule(id, marker) {
     });
     synth.triggerAttack(_oscFreq(def, smoother.get()));
     node = synth; // routing connects it to the center master
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    synth.connect(meter);           // passive tap; routing to master is unchanged
   } else if (def.type === 'effect') {
     node = def.makeNode();          // created disconnected; routing inserts it
     def.applyParam(node, def.getParamT(smoother.get()));
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    node.connect(meter);            // passive tap
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
@@ -110,6 +134,7 @@ function _addModule(id, marker) {
   activeModules[id] = {
     def,
     node,
+    meter,
     smoother,
     missCount: 0,
     lastPos: { wx: marker.wx, wy: marker.wy },
@@ -121,6 +146,8 @@ function _addModule(id, marker) {
 function _removeModule(id) {
   const m = activeModules[id];
   if (!m) return;
+
+  if (m.meter) { try { m.meter.dispose(); } catch (_) {} }
 
   if (m.def.type === 'oscillator' && m.node) {
     m.node.triggerRelease();
@@ -337,3 +364,5 @@ window.applyRoutingPlan   = applyRoutingPlan;
 window.updateModulation   = updateModulation;
 window.getSeqStep         = getSeqStep;
 window.getSeqPulses       = getSeqPulses;
+window.getModuleLevel     = getModuleLevel;
+window.getLfoRate         = getLfoRate;

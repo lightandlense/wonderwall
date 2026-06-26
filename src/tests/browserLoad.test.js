@@ -35,7 +35,8 @@ function makeSandbox() {
   class FeedbackDelay extends Node { constructor() { super(); this.feedback = param(); } }
   class LFO extends Node { constructor() { super(); this.frequency = param(); } start() { return this; } set min(v) {} set max(v) {} }
   class Loop { constructor(cb) { this.cb = cb; } start() { return this; } }
-  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, start: async () => {},
+  class Meter extends Node { constructor() { super(); } getValue() { return -100; } }
+  sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, start: async () => {},
     Transport: { bpm: { value: 120 }, start() {}, stop() {} } };
 
   // BFS over audio edges: does any oscillator reach Destination?
@@ -144,4 +145,29 @@ test('oscillator + output produces an audio path that reaches the speaker', asyn
 
   assert.ok(ctx.__synthReachesDest(),
     'oscillator is not connected through to Destination — the output got disconnected from the speaker');
+});
+
+test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
+  const ctx = makeSandbox();
+  loadAll(ctx);
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : () => {}) });
+  ctx.__fakeCtx = fakeCtx;
+  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
+  vm.runInContext(`window.onMarkersDetected = function (d) {
+    reconcileModules(d); const a = getActiveModules();
+    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
+  };`, ctx);
+  await vm.runInContext('initAudio()', ctx);
+
+  const osc = { id: 0, wx: 100, wy: 100, angle: 0 };
+  const lfo = { id: 4, wx: 200, wy: 120, angle: 0 };
+  for (let i = 0; i < 3; i++) ctx.onMarkersDetected([osc, lfo]);
+
+  const lvl = vm.runInContext('getModuleLevel(0)', ctx);
+  assert.strictEqual(typeof lvl, 'number');
+  assert.ok(lvl >= 0 && lvl <= 1, 'level in [0,1]');
+  assert.strictEqual(vm.runInContext('getModuleLevel(999)', ctx), 0, 'unknown id -> 0');
+  const rate = vm.runInContext('getLfoRate(4)', ctx);
+  assert.strictEqual(typeof rate, 'number');
+  assert.ok(rate >= 0.1 && rate <= 8, 'lfo rate within design range');
 });
