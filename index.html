@@ -51,9 +51,10 @@
 
   <div id="start-banner">
     <h1>REACTABLE WALL</h1>
-    <p>Place ID 0 (Oscillator) + ID 3 (Output) to make sound.<br>
-       Drop ID 1 (Filter) or ID 2 (Delay) on the cable between them to shape it.<br>
-       ID 4 (LFO) modulates the nearest puck. ID 5 (Tonality) keeps you in key.</p>
+    <p>Place ID 0 (Oscillator) anywhere — it flows to the glowing center and sounds.<br>
+       Add ID 1 (Filter) / ID 2 (Delay) near the path to the center to shape it.<br>
+       ID 6 (Sequencer) near an oscillator adds rhythm; ID 5 (Tonality) makes it melodic.<br>
+       ID 4 (LFO) modulates the nearest puck; ID 3 (Volume) sets master level.</p>
     <button id="start-btn">TAP TO START</button>
   </div>
 
@@ -71,6 +72,7 @@
   <!-- New for Reactable Wall -->
   <script src="src/utils/angleSmoothing.js"></script>
   <script src="src/utils/tonality.js"></script>
+  <script src="src/utils/rhythmPatterns.js"></script>
   <script src="src/services/moduleRegistry.js"></script>
   <script src="src/services/audioEngine.js"></script>
   <script src="src/components/visualEngine.js"></script>
@@ -119,10 +121,11 @@
       try {
         reconcileModules(detected);
         const active = getActiveModules();
-        const plan = routingGraph.update(active, window.innerWidth);
+        const vp = { w: window.innerWidth, h: window.innerHeight };
+        const plan = routingGraph.update(active, vp);
         applyRoutingPlan(plan);
         updateModulation();
-        const edges = routingGraph.getEdges(plan, active);
+        const edges = routingGraph.getEdges(plan, active, vp);
         visualEngine.draw(detected, edges);
       } catch (err) {
         console.error('[onMarkersDetected] frame error (loop continues):', err);
