@@ -25,10 +25,15 @@ function _oscFreq(def, angle) {
 // Set of module ids currently driven by an LFO (skip direct param ramp for them).
 let _lfoTargets = new Set();
 
+// Always-on central master output (the wall-center hub). Created in initAudio,
+// always wired to the speaker; every chain terminates here.
+let master = null;
+
 // Must be called once from a user gesture (click) to resume the AudioContext.
 async function initAudio() {
   if (audioInitialized) return;
   await Tone.start();
+  master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
   audioInitialized = true;
   console.log('[audio] AudioContext started');
 }
@@ -52,16 +57,14 @@ function _addModule(id, marker) {
       volume: -8,
     });
     synth.triggerAttack(_oscFreq(def, smoother.get()));
-    node = synth; // routing connects it; starts disconnected (silent until patched)
-  } else if (def.type === 'output') {
-    node = new Tone.Volume(def.getVolDb(smoother.get())).toDestination();
+    node = synth; // routing connects it to the center master
   } else if (def.type === 'effect') {
     node = def.makeNode();          // created disconnected; routing inserts it
     def.applyParam(node, def.getParamT(smoother.get()));
-  } else if (def.type === 'controller' && def.subtype === 'lfo') {
-    node = null;                    // JS-driven modulation; no Tone.LFO audio node
+  } else if (def.type === 'controller') {
+    node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
-    node = null;                    // tonality has no audio node
+    node = null;                    // tonality / volume have no audio node
   }
 
   activeModules[id] = {
@@ -104,8 +107,8 @@ function _updateModule(id, marker) {
   if (m.def.type === 'oscillator' && m.node) {
     // 50ms ramp — smooths pitch between detection frames without perceptible lag
     m.node.frequency.rampTo(_oscFreq(m.def, angle), 0.05);
-  } else if (m.def.type === 'output' && m.node) {
-    m.node.volume.rampTo(m.def.getVolDb(angle), 0.05);
+  } else if (m.def.type === 'global' && m.def.subtype === 'volume' && master) {
+    master.volume.rampTo(m.def.getVolDb(angle), 0.05);
   } else if (m.def.type === 'effect' && m.node && !_lfoTargets.has(m.def.id)) {
     // While an LFO drives this effect, its rotation feeds the LFO window instead
     // (handled in applyRoutingPlan), so skip the direct ramp to avoid fighting it.
@@ -201,23 +204,21 @@ function applyRoutingPlan(plan) {
     if (_lastChainKeys[chain.genId] === key) return; // unchanged
     _lastChainKeys[chain.genId] = key;
 
-    // Disconnect the source nodes (generator + effects) before re-wiring.
-    // NEVER disconnect the output node: it reaches the speaker via .toDestination()
-    // set at creation, and disconnect() would sever that, killing all sound.
+    // 'master' resolves to the always-on center node; it is the terminal and is
+    // never disconnected (it reaches the speaker via .toDestination()).
+    const nodeOf = (id) => (id === 'master' ? master : (activeModules[id] && activeModules[id].node));
+
     chain.nodeIds.forEach(id => {
-      if (id === chain.outputId) return;
-      const m = activeModules[id];
-      if (m && m.node) { try { m.node.disconnect(); } catch (_) {} }
+      if (id === 'master') return;
+      const n = nodeOf(id);
+      if (n) { try { n.disconnect(); } catch (_) {} }
     });
 
-    if (!chain.outputId) return; // silent: leave generator disconnected
-
     for (let i = 0; i < chain.nodeIds.length - 1; i++) {
-      const a = activeModules[chain.nodeIds[i]];
-      const b = activeModules[chain.nodeIds[i + 1]];
-      if (a && a.node && b && b.node) { try { a.node.connect(b.node); } catch (_) {} }
+      const a = nodeOf(chain.nodeIds[i]);
+      const b = nodeOf(chain.nodeIds[i + 1]);
+      if (a && b) { try { a.connect(b); } catch (_) {} }
     }
-    // output node still routes to Destination (never disconnected above)
     console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
   });
   // generators that vanished from the plan: drop their cached key

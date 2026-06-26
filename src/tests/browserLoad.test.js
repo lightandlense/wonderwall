@@ -87,10 +87,10 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
     window.onMarkersDetected = function (detected) {
       reconcileModules(detected);
       const active = getActiveModules();
-      const plan = routingGraph.update(active, 1280);
+      const plan = routingGraph.update(active, { w: 1280, h: 720 });
       applyRoutingPlan(plan);
       updateModulation();
-      const edges = routingGraph.getEdges(plan, active);
+      const edges = routingGraph.getEdges(plan, active, { w: 1280, h: 720 });
       visualEngine.draw(detected, edges);
     };
   `, ctx);
@@ -120,7 +120,7 @@ test('oscillator + output produces an audio path that reaches the speaker', asyn
     window.onMarkersDetected = function (detected) {
       reconcileModules(detected);
       const active = getActiveModules();
-      const plan = routingGraph.update(active, 1280);
+      const plan = routingGraph.update(active, { w: 1280, h: 720 });
       applyRoutingPlan(plan);
     };
   `, ctx);
