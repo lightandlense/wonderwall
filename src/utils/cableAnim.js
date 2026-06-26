@@ -71,6 +71,23 @@ const cableAnim = {
     }
     return out;
   },
+  // Downsample a sample array into n peak magnitudes (max abs per bucket), in [0,1].
+  peakEnvelope(samples, n) {
+    const len = samples ? samples.length : 0;
+    if (len === 0 || !(n > 0)) return [];
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const start = Math.floor((i * len) / n);
+      const end = Math.max(start + 1, Math.floor(((i + 1) * len) / n));
+      let peak = 0;
+      for (let j = start; j < end && j < len; j++) {
+        const a = Math.abs(samples[j]);
+        if (a > peak) peak = a;
+      }
+      out.push(peak > 1 ? 1 : peak);
+    }
+    return out;
+  },
 };
 
 if (typeof window !== 'undefined') window.cableAnim = cableAnim;

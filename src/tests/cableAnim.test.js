@@ -90,3 +90,15 @@ test('cometTail: segments trail behind head, clipped to [0,len)', () => {
   assert.ok(t[0].alpha > t[2].alpha);
   assert.deepStrictEqual(cableAnim.cometTail(5, 3, 8, 100), []);
 });
+
+test('peakEnvelope: n buckets, each the max abs, in [0,1]', () => {
+  const s = [0, 0.2, -0.9, 0.1, 0.5, -0.3];
+  const env = cableAnim.peakEnvelope(s, 3);
+  assert.deepStrictEqual(env, [0.2, 0.9, 0.5]);
+  assert.ok(env.every(v => v >= 0 && v <= 1));
+});
+
+test('peakEnvelope: empty / non-positive n -> []', () => {
+  assert.deepStrictEqual(cableAnim.peakEnvelope([], 4), []);
+  assert.deepStrictEqual(cableAnim.peakEnvelope([0.5, 0.5], 0), []);
+});
