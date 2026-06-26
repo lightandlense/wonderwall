@@ -43,9 +43,13 @@ function _addModule(id, marker) {
   let node = null;
 
   if (def.type === 'oscillator') {
+    // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
+    // audible. A pure sine has no harmonics for a filter to act on, making the
+    // effects nearly silent. -8 dB tames the saw's harshness; Output sets level.
     const synth = new Tone.Synth({
-      oscillator: { type: 'sine' },
+      oscillator: { type: 'sawtooth' },
       envelope: { attack: 0.1, decay: 0, sustain: 1, release: 0.3 },
+      volume: -8,
     });
     synth.triggerAttack(_oscFreq(def, smoother.get()));
     node = synth; // routing connects it; starts disconnected (silent until patched)
