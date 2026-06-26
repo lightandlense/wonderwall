@@ -100,3 +100,15 @@ test('getEdges: control edges carry srcId and dstId', () => {
   assert.strictEqual(ctrl.srcId, 4);
   assert.strictEqual(ctrl.dstId, 1);
 });
+
+const samp = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'sampler' } });
+test('buildRawPlan: a sampler is a generator (gets a chain to master)', () => {
+  const plan = routingGraph.buildRawPlan([samp(7, 480, 480)], VP, new Set());
+  assert.strictEqual(plan.chains.length, 1);
+  assert.deepStrictEqual(plan.chains[0].nodeIds, [7, 'master']);
+});
+
+test('buildRawPlan: a filter inserts on a sampler chain', () => {
+  const plan = routingGraph.buildRawPlan([samp(7, 200, 500), eff(1, 350, 500, 'filter')], VP, new Set());
+  assert.deepStrictEqual(plan.chains[0].nodeIds, [7, 1, 'master']);
+});

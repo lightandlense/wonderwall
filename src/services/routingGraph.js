@@ -21,7 +21,7 @@ function buildRawPlan(modules, viewport, prevMembership) {
   const prev = prevMembership || new Set();
   const C = { wx: viewport.w / 2, wy: viewport.h / 2 };
 
-  const gens = modules.filter(m => m.def.type === 'oscillator');
+  const gens = modules.filter(m => m.def.type === 'oscillator' || m.def.type === 'sampler');
   const effects = modules.filter(m => m.def.type === 'effect');
   const controllers = modules.filter(m => m.def.type === 'controller');
   const tonalityMod = modules.find(m => m.def.type === 'global' && m.def.subtype === 'tonality');
