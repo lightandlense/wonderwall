@@ -121,6 +121,7 @@
         const active = getActiveModules();
         const plan = routingGraph.update(active, window.innerWidth);
         applyRoutingPlan(plan);
+        updateModulation();
         const edges = routingGraph.getEdges(plan, active);
         visualEngine.draw(detected, edges);
       } catch (err) {

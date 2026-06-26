@@ -59,7 +59,7 @@ function _addModule(id, marker) {
     node = def.makeNode();          // created disconnected; routing inserts it
     def.applyParam(node, def.getParamT(smoother.get()));
   } else if (def.type === 'controller' && def.subtype === 'lfo') {
-    node = new Tone.LFO(def.getRateHz(smoother.get()), 0, 1).start();
+    node = null;                    // JS-driven modulation; no Tone.LFO audio node
   } else if (def.type === 'global') {
     node = null;                    // tonality has no audio node
   }
@@ -146,33 +146,46 @@ function reconcileModules(markers) {
 }
 
 let _lastChainKeys = {};   // genId -> last applied "a>b>c" string
-let _activeLinks = {};     // lfoId -> targetId currently connected
-let _lfoWindowCache = {};  // lfoId -> last target paramT the LFO window was set for
+let _activeLinks = {};     // lfoId -> targetId currently modulated
+let _lfoPhase = {};        // lfoId -> running phase (radians)
+let _lastModTime = null;   // performance.now() of the last modulation tick
 
-// Map an effect/osc module to the Tone Param the LFO should modulate (option B).
-function _modTargetParam(mod) {
-  if (mod.def.type === 'oscillator') return mod.node.detune; // vibrato
-  return mod.node[mod.def.modParam];                         // filter.frequency / delay.feedback
+// Apply one LFO's modulation to its target's parameter (JS-driven, option B:
+// the target's rotation sets the center; the LFO oscillates around it).
+function _applyLfoMod(lfoMod, tgt, s) {
+  const t = tgt.def.getParamT(tgt.smoother.get());
+  try {
+    if (tgt.def.type === 'oscillator') {
+      tgt.node.detune.rampTo(30 * s, 0.02);                          // +-30 cents vibrato
+    } else if (tgt.def.subtype === 'filter') {
+      const c = tgt.def.centerValue(t);
+      tgt.node.frequency.rampTo(c * Math.pow(2, 0.5 * s), 0.02);     // +-half octave around cutoff
+    } else if (tgt.def.subtype === 'delay') {
+      const c = tgt.def.centerValue(t);
+      tgt.node.feedback.rampTo(Math.max(0, Math.min(0.85, c + 0.2 * s)), 0.02);
+    }
+  } catch (_) {}
 }
 
-// Set the LFO's min/max window centered on the target's current rotation value.
-// Tone requires min < max; clamp defensively so a degenerate window can't throw.
-function _setLfoWindow(lfoMod, targetMod) {
-  const t = targetMod.def.getParamT(targetMod.smoother.get());
-  let min, max;
-  if (targetMod.def.type === 'oscillator') {
-    min = -30; max = 30;                                      // +-30 cents vibrato
-  } else if (targetMod.def.subtype === 'filter') {
-    const c = targetMod.def.centerValue(t);
-    min = c * 0.5; max = c * 2;                               // +- octave around cutoff
-  } else if (targetMod.def.subtype === 'delay') {
-    const c = targetMod.def.centerValue(t);
-    min = Math.max(0, c - 0.2); max = Math.min(0.85, c + 0.2);
-  } else {
-    return;
-  }
-  if (!(max > min)) max = min + 1e-3;                         // guarantee a valid window
-  try { lfoMod.node.min = min; lfoMod.node.max = max; } catch (_) {}
+// Call once per frame: advance each active LFO's phase and modulate its target.
+// Pure rampTo writes (bounded) — no audio-graph param connections, which is what
+// previously froze the WebAudio thread when an LFO was linked to a filter.
+function updateModulation() {
+  if (!audioInitialized) return;
+  const now = (typeof performance !== 'undefined') ? performance.now() : 0;
+  let dt = _lastModTime == null ? 0.016 : (now - _lastModTime) / 1000;
+  _lastModTime = now;
+  if (dt <= 0 || dt > 0.1) dt = 0.016; // guard first frame / tab-away pauses
+
+  Object.keys(_activeLinks).forEach(lfoIdStr => {
+    const lfoId = Number(lfoIdStr);
+    const lfoMod = activeModules[lfoId];
+    const tgt = activeModules[_activeLinks[lfoId]];
+    if (!lfoMod || !tgt || !tgt.node) return;
+    const rate = lfoMod.def.getRateHz(lfoMod.smoother.get());
+    _lfoPhase[lfoId] = ((_lfoPhase[lfoId] || 0) + 2 * Math.PI * rate * dt) % (2 * Math.PI);
+    _applyLfoMod(lfoMod, tgt, Math.sin(_lfoPhase[lfoId]));
+  });
 }
 
 // Execute a RoutingPlan: rewire only chains/links that changed; refresh LFO windows.
@@ -210,37 +223,26 @@ function applyRoutingPlan(plan) {
   // generators that vanished from the plan: drop their cached key
   Object.keys(_lastChainKeys).forEach(g => { if (!seenGen.has(Number(g))) delete _lastChainKeys[g]; });
 
-  // ---- control links ----
+  // ---- control links (JS-driven; no audio-graph connections) ----
+  // Just track which LFO drives which target; updateModulation() does the work.
   const desired = {}; plan.controlLinks.forEach(l => { desired[l.lfoId] = l.targetId; });
 
-  // tear down links that changed/disappeared
   Object.keys(_activeLinks).forEach(lfoIdStr => {
     const lfoId = Number(lfoIdStr);
     if (desired[lfoId] !== _activeLinks[lfoId]) {
-      const lfoMod = activeModules[lfoId];
-      if (lfoMod && lfoMod.node) { try { lfoMod.node.disconnect(); } catch (_) {} }
       delete _activeLinks[lfoId];
-      delete _lfoWindowCache[lfoId];
+      delete _lfoPhase[lfoId];
+      // target resumes rotation control next frame (it leaves _lfoTargets below)
     }
   });
-  // establish / refresh links
   plan.controlLinks.forEach(l => {
     const lfoMod = activeModules[l.lfoId];
     const tgtMod = activeModules[l.targetId];
-    if (!lfoMod || !lfoMod.node || !tgtMod || !tgtMod.node) return;
-    const tNow = tgtMod.def.getParamT(tgtMod.smoother.get());
+    if (!lfoMod || !tgtMod || !tgtMod.node) return;
     if (_activeLinks[l.lfoId] !== l.targetId) {
-      _setLfoWindow(lfoMod, tgtMod);
-      try { lfoMod.node.connect(_modTargetParam(tgtMod)); } catch (_) {}
       _activeLinks[l.lfoId] = l.targetId;
-      _lfoWindowCache[l.lfoId] = tNow;
+      _lfoPhase[l.lfoId] = 0;
       console.log(`[audio] LFO ${l.lfoId} -> module ${l.targetId}`);
-    } else if (_lfoWindowCache[l.lfoId] === undefined || Math.abs(_lfoWindowCache[l.lfoId] - tNow) > 0.01) {
-      // Refresh the window ONLY when the target knob actually moved. Rewriting
-      // lfo.min/max every idle frame piles up Tone param-automation events and
-      // eventually freezes the audio thread (the reported LFO freeze).
-      _setLfoWindow(lfoMod, tgtMod);
-      _lfoWindowCache[l.lfoId] = tNow;
     }
   });
 
@@ -270,3 +272,4 @@ window.reconcileModules   = reconcileModules;
 window.getModuleParam     = getModuleParam;
 window.getActiveModules   = getActiveModules;
 window.applyRoutingPlan   = applyRoutingPlan;
+window.updateModulation   = updateModulation;

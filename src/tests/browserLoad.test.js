@@ -89,6 +89,7 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
       const active = getActiveModules();
       const plan = routingGraph.update(active, 1280);
       applyRoutingPlan(plan);
+      updateModulation();
       const edges = routingGraph.getEdges(plan, active);
       visualEngine.draw(detected, edges);
     };
@@ -96,12 +97,16 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
 
   const osc = { id: 0, wx: 100, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const out = { id: 3, wx: 300, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const filt = { id: 1, wx: 200, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const lfo = { id: 4, wx: 210, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
 
   assert.doesNotThrow(() => {
     ctx.onMarkersDetected([]);          // audio off, no markers
     ctx.onMarkersDetected([osc, out]);  // audio off, markers present
     vm.runInContext('initAudio()', ctx);
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, out]); // audio on, debounce commits chain
+    // LFO + osc + filter + output (the combo that froze): many frames, must stay clean
+    for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, filt, out, lfo]);
   });
 });
 
