@@ -246,10 +246,14 @@ function _swapLoop(id, idx) {
   const entry = _loopBank.LOOP_BANK[idx];
   const buf = entry && LOOP_BUFFERS[entry.file];
   if (!buf) return;
-  Tone.Transport.scheduleOnce(() => {
+  Tone.Transport.scheduleOnce((time) => {
     try {
       m.node.buffer = buf;
       m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+      // A looping Player keeps playing its OLD buffer until the source is recreated;
+      // restart() makes a fresh source so the new loop actually plays.
+      m.node.restart(time);
+      console.log('[audio] loop ->', entry.name);
     } catch (_) {}
   }, '@1m');
 }

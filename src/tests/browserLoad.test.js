@@ -38,7 +38,7 @@ function makeSandbox() {
   class Meter extends Node { constructor() { super(); } getValue() { return -100; } }
   class Player extends Node {
     constructor() { super(); this.playbackRate = 1; this.buffer = null; synths.push(this); }
-    sync() { return this; } start() { return this; } stop() { return this; }
+    sync() { return this; } start() { return this; } stop() { return this; } restart() { return this; }
   }
   const ToneAudioBuffer = { fromUrl: async () => ({ toArray: () => new Float32Array([0, 0.5, -0.5, 1, -1, 0.25]), duration: 2 }) };
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
@@ -202,5 +202,10 @@ test('Loop + Tempo pucks: play through master, expose peaks, set tempo', async (
   const peaks = vm.runInContext('getLoopPeaks(7)', ctx);
   assert.ok(Array.isArray(peaks) && peaks.length > 0, 'loop exposes a peak envelope');
   assert.strictEqual(vm.runInContext('typeof getModuleLevel(7)', ctx), 'number');
+  // Rotate the loop puck to a different bank index — exercises the loop-swap (restart) path.
+  assert.doesNotThrow(() => {
+    const loopRot = { id: 7, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: loop.screenCorners };
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loopRot, tempo]);
+  });
   assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]); });
 });
