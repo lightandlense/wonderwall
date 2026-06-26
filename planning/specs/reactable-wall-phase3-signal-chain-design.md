@@ -58,28 +58,35 @@ RoutingPlan = {
 }
 ```
 
-### 3.1 On-the-cable effect insertion
+### 3.1 Nearest-neighbor effect insertion
 
-For each generator that has an output within `PATCH_RADIUS` (Phase 2's 35%-of-screen-width):
+> **Amended 2026-06-25:** the original "on-the-cable" rule (effects had to sit on the
+> straight line between generator and output) was replaced after playtest with the
+> **nearest-neighbor proximity model**, which matches how the real Reactable connects:
+> objects link to their nearest neighbor and signal flows toward the output. Effects
+> insert by being *near* the path, not on a precise line.
 
-1. Define segment **S** = generator → output (world/pixel coords).
-2. For each effect puck compute:
-   - perpendicular distance `d` from the puck to **S**
-   - projection `t ∈ [0,1]` of the puck onto **S** (clamped)
-3. An effect is **on the cable** when `d < BAND` **and** `0 < t < 1`.
-4. Order on-cable effects by `t` ascending → that is the chain order
-   (`gen → effect@small-t → … → effect@large-t → output`).
-5. Chain `nodeIds = [genId, ...orderedEffectIds, outputId]`.
+For each generator, the target is its **nearest output** overall. The chain is built by a
+greedy walk from the generator toward that output:
 
-A generator with **no output in range** produces a chain with no `outputId` → it stays
-**silent** (locked decision #2 from the base spec: connection is what makes sound).
+1. `current = generator`.
+2. Among effects not yet claimed, find the **nearest one to `current`** that is within
+   `CONNECT_RADIUS` **and strictly closer to the output than `current`** (so signal always
+   progresses "downhill" toward the speaker — this also prevents cycles).
+3. If found, hop to it (append to chain) and repeat from step 2.
+4. When no qualifying effect remains, connect `current → output` **iff** the output is
+   within reach. Otherwise the generator can't reach an output → it stays **silent**
+   (locked decision #2: connection is what makes sound).
+5. Chain `nodeIds = [genId, ...orderedEffectIds, outputId]` (order = the hop sequence).
+
+An effect already claimed by an earlier generator's chain is not reused by another.
 
 ### 3.2 Hysteresis & debounce (anti-flicker)
 
-Pucks jitter; raw band tests would make effects pop in and out of chains.
+Pucks jitter; raw radius tests would make hops pop in and out of chains.
 
-- **Spatial hysteresis:** `BAND_ADD < BAND_KEEP`. An effect must come within `BAND_ADD`
-  to *join* a cable, but only leaves once it exceeds `BAND_KEEP`.
+- **Spatial hysteresis:** an existing hop stays connected out to `CONNECT_RADIUS *
+  KEEP_FACTOR` (1.25×), but a new hop must come within `CONNECT_RADIUS` to form.
 - **Temporal debounce:** a computed chain change must persist `CHAIN_HOLD_FRAMES`
   (~120 ms at the detection cadence) before it is committed and the audio is rewired.
 
@@ -157,16 +164,19 @@ The reference mockup of the intended look lives at `docs/phase3-mockup.html`.
 
 ## 6. Testing
 
-This vanilla project has no test harness. The risky logic is the geometry + graph builder,
-which is **pure and deterministic** — that is what gets unit tests; audio/visual wiring is
-verified by on-wall playtest (the project's established method) aided by the debug readout.
+This vanilla project uses Node's built-in runner (`npm test` → `node --test`). The risky
+logic is the graph builder, which is **pure and deterministic** — that gets unit tests;
+audio/visual wiring is verified by on-wall playtest plus a shared-scope browser-load test.
 
-Add `src/tests/` covering `routingGraph`:
-- point-to-segment perpendicular distance & clamped projection `t`
-- on-cable selection (band test) and chain ordering by `t`
-- spatial hysteresis (`BAND_ADD` vs `BAND_KEEP`) and temporal debounce
-- nearest-target selection for control links (excludes outputs/controllers)
-- tonality quantization (angle → nearest scale note)
+`src/tests/` covers:
+- `routingGraph`: nearest-neighbor chain build, off-line insertion, progress-toward-output
+  rule, two-effect chaining order, spatial hysteresis (`KEEP_FACTOR`), temporal debounce,
+  nearest-target control links (excludes outputs/controllers)
+- `tonality`: quantization (angle → nearest scale note) and `rootFromT`
+- `moduleRegistry`: module types, reserved-ID guard, param mappings
+- `browserLoad`: loads all `<script>`s into one shared VM context (mirrors the browser) to
+  catch cross-file `const` collisions; tracks the audio graph to assert an oscillator
+  actually reaches Destination
 
 Target: the graph builder's branches covered; no coverage gate on glue code.
 
@@ -177,12 +187,12 @@ Target: the graph builder's branches covered; no coverage gate on glue code.
 | File | Change |
 |------|--------|
 | `src/services/moduleRegistry.js` | +Filter, Delay, LFO, Tonality defs; per-class metadata (`class`, `makeNode`, `applyParam`, `modTarget`, `getQuantizer`) |
-| `src/services/routingGraph.js` | **replaces** `patchGraph.js`; full RoutingPlan builder + geometry + hysteresis/debounce |
+| `src/services/routingGraph.js` | **replaces** `patchGraph.js`; nearest-neighbor RoutingPlan builder + hysteresis/debounce |
 | `src/services/audioEngine.js` | class-branched node creation; `applyRoutingPlan`; LFO link/unlink (option B); tonality-aware `getFreq` |
 | `src/components/visualEngine.js` | multi-segment chains, control-link style, tonality HUD, extended debug readout |
 | `index.html` | wire RoutingPlan into `onMarkersDetected`; update start-banner copy |
 | `print.html` | add marker IDs 1, 2, 4, 5 with labels |
-| `src/tests/` | geometry + graph-builder unit tests |
+| `src/tests/` | graph-builder, tonality, registry, and shared-scope browser-load tests |
 | `docs/phase3-mockup.html` | reference mockup (already added) |
 
 ---
@@ -191,10 +201,9 @@ Target: the graph builder's branches covered; no coverage gate on glue code.
 
 | Constant | Start value | Meaning |
 |----------|-------------|---------|
-| `PATCH_RADIUS` | `0.35 * innerWidth` | gen↔output connect distance (Phase 2) |
-| `BAND_ADD` | `60 px` | perpendicular distance to *join* a cable |
-| `BAND_KEEP` | `95 px` | perpendicular distance to *stay* on a cable |
-| `CONTROL_RADIUS` | `0.30 * innerWidth` | LFO↔target link distance |
+| `CONNECT_FRAC` | `0.35 * innerWidth` | audio-hop distance (osc/effect → next node) |
+| `KEEP_FACTOR` | `1.25` | an existing hop stays connected out to `CONNECT_RADIUS × KEEP_FACTOR` |
+| `CONTROL_FRAC` | `0.30 * innerWidth` | LFO↔target link distance |
 | `CHAIN_HOLD_FRAMES` | `3` (~120 ms) | persistence before committing a routing change |
 
 ---

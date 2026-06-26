@@ -54,7 +54,6 @@ function makeSandbox() {
 // Same order as index.html's <script> tags (CDN libs excluded — pure app scripts).
 const SCRIPTS = [
   'src/utils/angleSmoothing.js',
-  'src/utils/geometry.js',
   'src/utils/tonality.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',

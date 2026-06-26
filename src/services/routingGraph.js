@@ -2,15 +2,9 @@
 // Pure, per-frame routing planner. Replaces patchGraph.js.
 // Produces a RoutingPlan that audioEngine.applyRoutingPlan() executes.
 
-// Named _geom (not `geometry`) to avoid colliding with geometry.js's top-level
-// `const geometry` — classic browser <script>s share one lexical scope, so two
-// top-level `const geometry` declarations are a redeclaration SyntaxError.
-const _geom = (typeof require === 'function') ? require('../utils/geometry.js') : window.geometry;
-
 const CONSTANTS = {
-  PATCH_FRAC: 0.35,     // osc<->output connect distance as fraction of screen width
-  BAND_ADD: 60,         // perpendicular px to JOIN a cable
-  BAND_KEEP: 95,        // perpendicular px to STAY on a cable (hysteresis)
+  CONNECT_FRAC: 0.35,   // audio-hop distance as fraction of screen width
+  KEEP_FACTOR: 1.25,    // an existing hop stays connected out to KEEP_FACTOR x radius (hysteresis)
   CONTROL_FRAC: 0.30,   // lfo<->target distance as fraction of screen width
   CHAIN_HOLD_FRAMES: 3, // frames a chain change must persist before committing
 };
@@ -21,9 +15,14 @@ function _dist(a, b) {
 }
 
 // Pure: build the desired plan from a module snapshot.
-// prevMembership: Set of "genId:effId" strings (for spatial hysteresis).
+// Nearest-neighbor proximity model (like the real Reactable): each generator
+// walks toward its nearest output, hopping to the nearest unused effect that is
+// (a) within reach and (b) strictly closer to the output, until it can connect
+// to the output. Effects insert by being NEAR the path, not on a precise line.
+// prevMembership: Set of "genId:nodeId" strings (for spatial hysteresis).
 function buildRawPlan(modules, screenWidth, prevMembership) {
-  const patchR = screenWidth * CONSTANTS.PATCH_FRAC;
+  const R = screenWidth * CONSTANTS.CONNECT_FRAC;
+  const KEEP = R * CONSTANTS.KEEP_FACTOR;
   const controlR = screenWidth * CONSTANTS.CONTROL_FRAC;
   const prev = prevMembership || new Set();
 
@@ -34,25 +33,45 @@ function buildRawPlan(modules, screenWidth, prevMembership) {
   const tonalityMod = modules.find(m => m.def.type === 'global' && m.def.subtype === 'tonality');
 
   const membership = new Set();
-  const chains = gens.map(gen => {
-    // nearest output within patch radius
-    let out = null, outDist = Infinity;
-    outputs.forEach(o => { const d = _dist(gen, o); if (d < patchR && d < outDist) { out = o; outDist = d; } });
+  const claimed = new Set(); // effect ids already used by an earlier chain
 
+  const chains = gens.map(gen => {
+    // target = nearest output overall (reachability is enforced by the hop radii)
+    let out = null, outDist = Infinity;
+    outputs.forEach(o => { const d = _dist(gen, o); if (d < outDist) { out = o; outDist = d; } });
     if (!out) return { genId: gen.id, nodeIds: [gen.id], outputId: null };
 
-    // effects on the cable gen->out
-    const onCable = [];
-    effects.forEach(e => {
-      const { dist, t } = _geom.pointToSegment(e.wx, e.wy, gen.wx, gen.wy, out.wx, out.wy);
-      if (t <= 0 || t >= 1) return;
-      const wasMember = prev.has(`${gen.id}:${e.id}`);
-      const band = wasMember ? CONSTANTS.BAND_KEEP : CONSTANTS.BAND_ADD;
-      if (dist < band) { onCable.push({ id: e.id, t }); membership.add(`${gen.id}:${e.id}`); }
-    });
-    onCable.sort((a, b) => a.t - b.t);
+    const nodes = [gen.id];
+    const localMembers = [];
+    let current = gen;
 
-    return { genId: gen.id, nodeIds: [gen.id, ...onCable.map(e => e.id), out.id], outputId: out.id };
+    // Greedy walk toward the output through effects.
+    while (true) {
+      let best = null, bestDist = Infinity;
+      const curToOut = _dist(current, out);
+      effects.forEach(e => {
+        if (claimed.has(e.id) || nodes.includes(e.id)) return;
+        if (_dist(e, out) >= curToOut) return;                 // must progress toward the output
+        const reach = prev.has(`${gen.id}:${e.id}`) ? KEEP : R; // hysteresis on existing hops
+        const d = _dist(current, e);
+        if (d < reach && d < bestDist) { best = e; bestDist = d; }
+      });
+      if (!best) break;
+      nodes.push(best.id);
+      localMembers.push(`${gen.id}:${best.id}`);
+      current = best;
+    }
+
+    // Connect the last node to the output only if it's within reach.
+    const finalReach = prev.has(`${gen.id}:out`) ? KEEP : R;
+    if (_dist(current, out) < finalReach) {
+      nodes.push(out.id);
+      localMembers.push(`${gen.id}:out`);
+      localMembers.forEach(m => membership.add(m));
+      nodes.slice(1, -1).forEach(id => claimed.add(id));
+      return { genId: gen.id, nodeIds: nodes, outputId: out.id };
+    }
+    return { genId: gen.id, nodeIds: [gen.id], outputId: null }; // couldn't reach output -> silent
   });
 
   // control links: each LFO -> nearest audio module (osc or effect) in range

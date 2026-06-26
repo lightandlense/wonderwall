@@ -12,9 +12,9 @@ no build step (mirrors Gizmo Factory). Entry point will be `index.html` at proje
   (on-the-cable signal-chain planner, NEW — replaced patchGraph), `moduleRegistry.js`
   (marker ID → module, NEW).
 - `utils/` — `homography.js` (math, ported), `angleSmoothing.js` (occlusion-tolerant
-  rotation, NEW), `geometry.js` (point-to-segment, NEW), `tonality.js` (scale
-  quantization, NEW).
-- `tests/` — geometry, tonality, module registry, and routingGraph plan logic (Node `--test`).
+  rotation, NEW), `tonality.js` (scale quantization, NEW).
+- `tests/` — tonality, module registry, routingGraph plan logic, and a shared-scope
+  browser-load test (Node `--test`).
 
 ## Rules of reuse
 
