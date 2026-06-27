@@ -8,7 +8,7 @@ global.tonality = tonality; // registry uses global tonality in browser; mirror 
 const MODULE_REGISTRY = require('../services/moduleRegistry.js');
 
 test('registry has the modules with correct types', () => {
-  assert.strictEqual(MODULE_REGISTRY[0].type, 'oscillator');
+  assert.strictEqual(MODULE_REGISTRY[0].type, 'bass');     // was oscillator (Phase 8)
   assert.strictEqual(MODULE_REGISTRY[1].type, 'effect');
   assert.strictEqual(MODULE_REGISTRY[1].subtype, 'filter');
   assert.strictEqual(MODULE_REGISTRY[2].subtype, 'delay');
@@ -17,19 +17,10 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
 });
 
-test('ID 3 is now a global Volume control; ID 6 is the Sequencer controller', () => {
+test('ID 3 is a global Volume control; ID 6 is the Chords generator', () => {
   assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
   assert.strictEqual(MODULE_REGISTRY[3].subtype, 'volume');
-  assert.strictEqual(MODULE_REGISTRY[6].type, 'controller');
-  assert.strictEqual(MODULE_REGISTRY[6].subtype, 'sequencer');
-});
-
-test('Sequencer getPatternIndex spans the bank across rotation', () => {
-  const seq = MODULE_REGISTRY[6];
-  const lo = seq.getPatternIndex(-Math.PI / 4);  // paramT ~ 0
-  const hi = seq.getPatternIndex(Math.PI / 4);   // paramT ~ 1
-  assert.ok(hi >= lo);
-  assert.ok(lo >= 0);
+  assert.strictEqual(MODULE_REGISTRY[6].type, 'chords');   // was sequencer (Phase 8)
 });
 
 test('calibration IDs are NOT in the registry', () => {
@@ -69,4 +60,22 @@ test('Tempo (id 8): rotation maps to 70..160 BPM', () => {
   assert.strictEqual(tempo.subtype, 'tempo');
   assert.strictEqual(tempo.getBpm(3 * Math.PI / 2), 70);
   assert.strictEqual(tempo.getBpm(Math.PI / 4), 160);
+});
+
+test('Bass (id 0): rotation selects a bassline; type bass', () => {
+  const bass = MODULE_REGISTRY[0];
+  assert.strictEqual(bass.type, 'bass');
+  const n = require('../data/bassLines.js').BASS_LINES.length;
+  assert.strictEqual(bass.getLineIndex(3 * Math.PI / 2), 0);
+  assert.strictEqual(bass.getLineIndex(Math.PI / 4), n - 1);
+  assert.strictEqual(typeof bass.getName(3 * Math.PI / 2), 'string');
+});
+
+test('Chords (id 6): rotation selects a progression; type chords', () => {
+  const ch = MODULE_REGISTRY[6];
+  assert.strictEqual(ch.type, 'chords');
+  const n = require('../data/chordProgressions.js').CHORD_PROGRESSIONS.length;
+  assert.strictEqual(ch.getProgIndex(3 * Math.PI / 2), 0);
+  assert.strictEqual(ch.getProgIndex(Math.PI / 4), n - 1);
+  assert.strictEqual(typeof ch.getName(3 * Math.PI / 2), 'string');
 });

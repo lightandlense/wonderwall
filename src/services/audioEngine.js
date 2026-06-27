@@ -18,6 +18,11 @@ const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatter
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
 const _drumGrooves = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
+const _bassLines = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
+const _chordProgs = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+const BASS_BASE_FREQ = 65.41;    // C2 anchor for the bass register
+const CHORD_BASE_FREQ = 261.63;  // C4 anchor for the chord pad
+const DEFAULT_ROOT = 0;          // C, when no Tonality puck is present
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
 
@@ -124,11 +129,30 @@ function _onStep(time) {
   Object.keys(activeModules).forEach(idStr => {
     const m = activeModules[idStr];
     if (!m || m.def.type !== 'drummer' || !m.drums) return;
-    const groove = _drumGrooves.DRUM_GROOVES[m.grooveIdx];
+    const groove = _drumGrooves.DRUM_GROOVES[m.presetIdx];
     if (!groove) return;
     if (groove.kick[_step])  { try { m.drums.kick.triggerAttackRelease('C1', '8n', time); } catch (_) {} }
     if (groove.snare[_step]) { try { m.drums.snare.triggerAttackRelease('16n', time); } catch (_) {} }
     if (groove.hat[_step])   { try { m.drums.hat.triggerAttackRelease('32n', time); } catch (_) {} }
+  });
+
+  // Bass + Chords pucks: self-play their selected preset each step, voiced in the Tonality key.
+  const _root = (_tonality && _tonality.active) ? _tonality.root : DEFAULT_ROOT;
+  Object.keys(activeModules).forEach(idStr => {
+    const m = activeModules[idStr];
+    if (!m || !m.node) return;
+    if (m.def.type === 'bass') {
+      const line = _bassLines.BASS_LINES[m.presetIdx];
+      const deg = line && line.steps[_step];
+      if (deg == null) return;
+      try { m.node.triggerAttackRelease(_tonalityUtil.scaleDegreeFreq(BASS_BASE_FREQ, _root, deg), '8n', time); } catch (_) {}
+    } else if (m.def.type === 'chords') {
+      const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
+      const d = prog && prog.steps[_step];
+      if (d == null) return;
+      const freqs = [d, d + 2, d + 4].map(x => _tonalityUtil.scaleDegreeFreq(CHORD_BASE_FREQ, _root, x));
+      try { m.node.triggerAttackRelease(freqs, '2n', time); } catch (_) {}
+    }
   });
 }
 
@@ -164,7 +188,7 @@ function _addModule(id, marker) {
   let meter = null;
   let loopIdx = -1;
   let drums = null;
-  let grooveIdx = 0;
+  let presetIdx = 0;
 
   if (def.type === 'oscillator') {
     // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
@@ -199,9 +223,29 @@ function _addModule(id, marker) {
       console.warn('[audio] Loop puck: no buffer for', entry.file, '— serve over http (npm start) so loops can load.');
     }
   } else if (def.type === 'drummer') {
-    grooveIdx = def.getGrooveIndex(smoother.get());
+    presetIdx = def.getGrooveIndex(smoother.get());
     drums = _makeDrums();           // kick/snare/hat -> drums.out; _onStep triggers them
     node = drums.out;               // routing connects this to the center master
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    node.connect(meter);
+  } else if (def.type === 'bass') {
+    presetIdx = def.getLineIndex(smoother.get());
+    node = new Tone.MonoSynth({
+      oscillator: { type: 'sawtooth' },
+      filter: { type: 'lowpass', Q: 2 },
+      envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2 },
+      filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2, baseFrequency: 80, octaves: 2.6 },
+      volume: -10,
+    });
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    node.connect(meter);
+  } else if (def.type === 'chords') {
+    presetIdx = def.getProgIndex(smoother.get());
+    node = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.3, decay: 0.2, sustain: 0.7, release: 0.8 },
+      volume: -16,
+    });
     meter = new Tone.Meter({ smoothing: 0.8 });
     node.connect(meter);
   } else if (def.type === 'controller') {
@@ -216,7 +260,7 @@ function _addModule(id, marker) {
     meter,
     loopIdx,
     drums,
-    grooveIdx,
+    presetIdx,
     smoother,
     missCount: 0,
     lastPos: { wx: marker.wx, wy: marker.wy },
@@ -273,7 +317,11 @@ function _updateModule(id, marker) {
       if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
     }
   } else if (m.def.type === 'drummer') {
-    m.grooveIdx = m.def.getGrooveIndex(angle);   // rotation picks the groove; _onStep reads it
+    m.presetIdx = m.def.getGrooveIndex(angle);   // rotation picks the groove; _onStep reads it
+  } else if (m.def.type === 'bass') {
+    m.presetIdx = m.def.getLineIndex(angle);
+  } else if (m.def.type === 'chords') {
+    m.presetIdx = m.def.getProgIndex(angle);
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);

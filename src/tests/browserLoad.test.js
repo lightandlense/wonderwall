@@ -45,8 +45,10 @@ function makeSandbox() {
   class MembraneSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   class NoiseSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   class MetalSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
+  class MonoSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
+  class PolySynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
-    Gain, MembraneSynth, NoiseSynth, MetalSynth,
+    Gain, MembraneSynth, NoiseSynth, MetalSynth, MonoSynth, PolySynth,
     start: async () => {},
     Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 
@@ -214,4 +216,34 @@ test('Drummer + Tempo pucks: drummer plays through master; groove rotates clean'
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drumRot, tempo]);
   });
   assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drum]); });
+});
+
+test('Bass + Chords pucks play through master; rotate clean; tonality optional', async () => {
+  const ctx = makeSandbox();
+  loadAll(ctx);
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
+  ctx.__fakeCtx = fakeCtx;
+  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
+  vm.runInContext(`window.onMarkersDetected = function (d) {
+    reconcileModules(d); const a = getActiveModules();
+    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
+    updateModulation();
+    const edges = routingGraph.getEdges(p, a, { w: 1280, h: 720 });
+    visualEngine.draw(d, edges);
+  };`, ctx);
+  await vm.runInContext('initAudio()', ctx);
+
+  const bass = { id: 0, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const chords = { id: 6, wx: 300, wy: 300, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const ton = { id: 5, wx: 900, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+
+  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([bass, chords, ton]);
+  assert.ok(ctx.__synthReachesDest(), 'bass/chords should reach master');
+  assert.strictEqual(vm.runInContext('typeof getModuleLevel(0)', ctx), 'number');
+  assert.strictEqual(vm.runInContext('typeof getModuleLevel(6)', ctx), 'number');
+  assert.doesNotThrow(() => {
+    const bRot = { id: 0, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: bass.screenCorners };
+    const cRot = { id: 6, wx: 300, wy: 300, angle: Math.PI / 4, screenCorners: chords.screenCorners };
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([bRot, cRot]);
+  });
 });

@@ -15,11 +15,20 @@ function _arcT(angle) {
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
 const MODULE_REGISTRY = {
-  // ID 0: Oscillator — rotation controls pitch (continuous; tonality applied by audioEngine)
+  // ID 0: Bass — self-playing bassline generator; rotation picks the line, key from Tonality.
+  // (Replaced the Oscillator; oscillator audio code left dormant.)
   0: {
-    id: 0, name: 'Oscillator', type: 'oscillator', color: '#44aaff', paramLabel: 'Pitch',
+    id: 0, name: 'Bass', type: 'bass', color: '#4d7cff', paramLabel: 'Line',
     getParamT(angle) { return _arcT(angle); },
-    getFreq(angle) { return 130.81 * Math.pow(8, _arcT(angle)); }, // C3..C6, 3 octaves
+    getLineIndex(angle) {
+      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
+      const n = bl.BASS_LINES.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
+      return bl.BASS_LINES[this.getLineIndex(angle)].name;
+    },
   },
 
   // ID 1: Filter — rotation controls low-pass cutoff
@@ -67,14 +76,19 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 6: Sequencer — controller; rotation selects a preset rhythm pattern
+  // ID 6: Chords — self-playing chord-pad generator; rotation picks the progression, key from Tonality.
+  // (Replaced the Sequencer; sequencer audio code left dormant.)
   6: {
-    id: 6, name: 'Sequencer', type: 'controller', subtype: 'sequencer', color: '#ffb74d', paramLabel: 'Pattern',
+    id: 6, name: 'Chords', type: 'chords', color: '#c9a7ff', paramLabel: 'Chords',
     getParamT(angle) { return _arcT(angle); },
-    getPatternIndex(angle) {
-      const rp = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
-      const n = rp.PATTERNS.length;
+    getProgIndex(angle) {
+      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+      const n = cp.CHORD_PROGRESSIONS.length;
       return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+      return cp.CHORD_PROGRESSIONS[this.getProgIndex(angle)].name;
     },
   },
 

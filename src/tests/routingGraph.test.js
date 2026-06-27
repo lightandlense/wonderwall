@@ -126,3 +126,12 @@ test('buildRawPlan: an LFO links to a nearby sampler (loop)', () => {
   assert.ok(link, 'lfo should link to something');
   assert.strictEqual(link.targetId, 7);
 });
+
+const bassMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'bass' } });
+const chordsMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'chords' } });
+test('buildRawPlan: bass and chords are generators (chain to master)', () => {
+  const pb = routingGraph.buildRawPlan([bassMod(0, 480, 480)], VP, new Set());
+  assert.deepStrictEqual(pb.chains[0].nodeIds, [0, 'master']);
+  const pc = routingGraph.buildRawPlan([chordsMod(6, 480, 480)], VP, new Set());
+  assert.deepStrictEqual(pc.chains[0].nodeIds, [6, 'master']);
+});
