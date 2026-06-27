@@ -105,6 +105,7 @@ function _onStep(time) {
   // --- Cross-modulation: gather this-step intent for all band pucks ---
   let _xm_kickFired = false, _xm_snareFired = false;
   let _xm_chordDeg = null, _xm_bassDeg = null, _xm_melodyDeg = null;
+  let _xm_bassStepCount = 0;
 
   Object.values(activeModules).forEach(m => {
     if (m.def.type === 'drummer') {
@@ -117,6 +118,7 @@ function _onStep(time) {
       const line = _bassLines.BASS_LINES[m.presetIdx];
       const d = line && line.steps[_step];
       if (d != null) _xm_bassDeg = d;
+      if (line) _xm_bassStepCount = line.steps.filter(s => s != null).length;
     } else if (m.def.type === 'chords') {
       const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
       const d = prog && prog.steps[_step];
@@ -186,12 +188,7 @@ function _onStep(time) {
     // Hat: normal groove
     //   + melody-driven hat (Melody → Drums: each melody note gates a hat)
     //   + bass-density hat (Bass → Drums: busy bass adds extra hat probability)
-    const bassLine = (() => {
-      const bm = Object.values(activeModules).find(x => x.def.type === 'bass');
-      return bm ? _bassLines.BASS_LINES[bm.presetIdx] : null;
-    })();
-    const bassStepCount = bassLine ? bassLine.steps.filter(s => s != null).length : 0;
-    const extraHatChance = _modDepth('bass', 'drummer') * (bassStepCount / 16);
+    const extraHatChance = _modDepth('bass', 'drummer') * (_xm_bassStepCount / 16);
     const hatFromBass = Math.random() < extraHatChance;
     const hatFromMelody = _modDepth('lead', 'drummer') > 0 && _xm_melodyDeg != null;
 
