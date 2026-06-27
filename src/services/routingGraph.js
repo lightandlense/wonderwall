@@ -28,6 +28,15 @@ function buildRawPlan(modules, viewport, prevMembership) {
 
   const membership = new Set();
 
+  // Exclusive mode: pre-assign each effect to its nearest generator.
+  // An effect can only be picked up by the gen it's physically closest to.
+  const nearestGen = {};
+  effects.forEach(e => {
+    let minDist = Infinity, nearestId = null;
+    gens.forEach(g => { const d = _dist(g, e); if (d < minDist) { minDist = d; nearestId = g.id; } });
+    nearestGen[e.id] = nearestId;
+  });
+
   const chains = gens.map(gen => {
     const nodes = [gen.id];
     const localMembers = [];
@@ -37,6 +46,7 @@ function buildRawPlan(modules, viewport, prevMembership) {
       const curToC = _dist(current, C);
       effects.forEach(e => {
         if (nodes.includes(e.id)) return;                // already in this gen's chain
+        if (nearestGen[e.id] !== gen.id) return;         // exclusive: only nearest gen claims
         if (_dist(e, C) >= curToC) return;               // must progress toward center
         const reach = prev.has(`${gen.id}:${e.id}`) ? KEEP : R;
         const d = _dist(current, e);

@@ -135,6 +135,36 @@ const MODULE_REGISTRY = {
     makeNode() { return new Tone.Distortion({ distortion: 0, wet: 1 }); },
     applyParam(node, t) { node.distortion = t * 0.9; },
   },
+
+  // ID 12: Chorus — rotation controls depth (thin to thick/detuned)
+  12: {
+    id: 12, name: 'Chorus', type: 'effect', subtype: 'chorus', color: '#44ff88',
+    paramLabel: 'Depth',
+    getParamT(angle) { return _arcT(angle); },
+    centerValue(t) { return t * 0.9; },
+    makeNode() { const c = new Tone.Chorus(4, 2.5, 0); c.start(); return c; },
+    applyParam(node, t) { node.depth = t * 0.9; },
+  },
+
+  // ID 14: Tremolo — rotation controls rate (slow throb to rapid stutter)
+  14: {
+    id: 14, name: 'Tremolo', type: 'effect', subtype: 'tremolo', color: '#ffdd44',
+    paramLabel: 'Rate',
+    getParamT(angle) { return _arcT(angle); },
+    centerValue(t) { return 1 + t * 11; }, // 1..12 Hz
+    makeNode() { const tr = new Tone.Tremolo(4, 0.8); tr.start(); return tr; },
+    applyParam(node, t) { node.frequency.rampTo(1 + t * 11, 0.05); },
+  },
+
+  // ID 15: BitCrusher — rotation controls bit depth (8 = clean, 1 = maximum crunch)
+  15: {
+    id: 15, name: 'Crusher', type: 'effect', subtype: 'bitcrusher', color: '#cc44ff',
+    paramLabel: 'Crush',
+    getParamT(angle) { return _arcT(angle); },
+    centerValue(t) { return Math.round(8 - t * 7); }, // 8..1 bits
+    makeNode() { return new Tone.BitCrusher(8); },
+    applyParam(node, t) { node.bits.value = Math.round(8 - t * 7); },
+  },
 };
 
 if (typeof window !== 'undefined') window.MODULE_REGISTRY = MODULE_REGISTRY;
