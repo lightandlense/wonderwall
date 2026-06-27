@@ -101,6 +101,50 @@ async function preloadLoops() {
 // its target on hit steps — pulses an oscillator, or stutter-retriggers a loop.
 function _onStep(time) {
   _step = (_step + 1) % _rhythm.STEPS;
+
+  // --- Cross-modulation: gather this-step intent for all band pucks ---
+  let _xm_kickFired = false, _xm_snareFired = false;
+  let _xm_chordDeg = null, _xm_bassDeg = null, _xm_melodyDeg = null;
+
+  Object.values(activeModules).forEach(m => {
+    if (m.def.type === 'drummer') {
+      const groove = _drumGrooves.DRUM_GROOVES[m.presetIdx];
+      if (groove) {
+        if (groove.kick[_step]) _xm_kickFired = true;
+        if (groove.snare[_step]) _xm_snareFired = true;
+      }
+    } else if (m.def.type === 'bass') {
+      const line = _bassLines.BASS_LINES[m.presetIdx];
+      const d = line && line.steps[_step];
+      if (d != null) _xm_bassDeg = d;
+    } else if (m.def.type === 'chords') {
+      const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
+      const d = prog && prog.steps[_step];
+      if (d != null) _xm_chordDeg = d;
+    } else if (m.def.type === 'lead') {
+      const mel = _melodyLines.MELODY_LINES[m.presetIdx];
+      const d = mel && mel.steps[_step];
+      if (d != null) _xm_melodyDeg = d;
+    }
+  });
+
+  // Chord-change detection for fill trigger (Chords → Drums: chord change = fill)
+  if (_xm_chordDeg !== null && _xm_chordDeg !== _modState.prevChordDeg) {
+    const depth = _modDepth('chords', 'drummer');
+    if (depth > 0) _modState.fillStepsRemaining = Math.round(4 * depth);
+    _modState.prevChordDeg = _xm_chordDeg;
+  }
+  if (_modState.fillStepsRemaining > 0) _modState.fillStepsRemaining--;
+  const _xm_inFill = _modState.fillStepsRemaining > 0;
+
+  // Melody contour tracking (Melody → Bass)
+  if (_xm_melodyDeg != null) {
+    _modState.melodyHistory.push(_xm_melodyDeg);
+    if (_modState.melodyHistory.length > 3) _modState.melodyHistory.shift();
+  }
+  const _xm_melodyAscending = _modState.melodyHistory.length >= 2
+    && _modState.melodyHistory[_modState.melodyHistory.length - 1] > _modState.melodyHistory[0];
+
   Object.keys(_activeLinks).forEach(cidStr => {
     const cid = Number(cidStr);
     const ctrl = activeModules[cid];
@@ -134,8 +178,26 @@ function _onStep(time) {
     const groove = _drumGrooves.DRUM_GROOVES[m.presetIdx];
     if (!groove) return;
     if (groove.kick[_step])  { try { m.drums.kick.triggerAttackRelease('C1', '8n', time); } catch (_) {} }
-    if (groove.snare[_step]) { try { m.drums.snare.triggerAttackRelease('16n', time); } catch (_) {} }
-    if (groove.hat[_step])   { try { m.drums.hat.triggerAttackRelease('32n', time); } catch (_) {} }
+
+    // Snare: normal groove + fill injection (Chords → Drums: chord change = fill)
+    const snareHit = groove.snare[_step] || (_xm_inFill && _step % 4 === 2);
+    if (snareHit) { try { m.drums.snare.triggerAttackRelease('16n', time); } catch (_) {} }
+
+    // Hat: normal groove
+    //   + melody-driven hat (Melody → Drums: each melody note gates a hat)
+    //   + bass-density hat (Bass → Drums: busy bass adds extra hat probability)
+    const bassLine = (() => {
+      const bm = Object.values(activeModules).find(x => x.def.type === 'bass');
+      return bm ? _bassLines.BASS_LINES[bm.presetIdx] : null;
+    })();
+    const bassStepCount = bassLine ? bassLine.steps.filter(s => s != null).length : 0;
+    const extraHatChance = _modDepth('bass', 'drummer') * (bassStepCount / 16);
+    const hatFromBass = Math.random() < extraHatChance;
+    const hatFromMelody = _modDepth('lead', 'drummer') > 0 && _xm_melodyDeg != null;
+
+    if (groove.hat[_step] || hatFromMelody || hatFromBass) {
+      try { m.drums.hat.triggerAttackRelease('32n', time); } catch (_) {}
+    }
   });
 
   // Bass + Chords pucks: self-play their selected preset each step, voiced in the Tonality key.
@@ -145,20 +207,88 @@ function _onStep(time) {
     if (!m || !m.node) return;
     if (m.def.type === 'bass') {
       const line = _bassLines.BASS_LINES[m.presetIdx];
-      const deg = line && line.steps[_step];
+      let deg = line && line.steps[_step];
       if (deg == null) return;
-      try { m.node.triggerAttackRelease(_tonalityUtil.scaleDegreeFreq(BASS_BASE_FREQ, _root, deg), '8n', time); } catch (_) {}
+
+      // Chords → Bass: chord root gravity — bias bass note toward chord root
+      if (_modDepth('chords', 'bass') > 0 && _xm_chordDeg != null
+          && Math.random() < _modDepth('chords', 'bass')) {
+        deg = _xm_chordDeg;
+      }
+
+      // Melody → Bass: ascending melody lifts bass an octave
+      const octShift = (_modDepth('lead', 'bass') > 0.5 && _xm_melodyAscending
+        && _modState.melodyHistory.length >= 2) ? 7 : 0;
+
+      // Drums → Bass: velocity boost on kick steps (lower on non-kick steps)
+      const dDepth = _modDepth('drummer', 'bass');
+      const vel = dDepth > 0 ? (_xm_kickFired ? 1.0 : Math.max(0.3, 1.0 - dDepth * 0.6)) : 1;
+
+      try { m.node.triggerAttackRelease(
+        _tonalityUtil.scaleDegreeFreq(BASS_BASE_FREQ, _root, deg + octShift),
+        '8n', time, vel,
+      ); } catch (_) {}
+
     } else if (m.def.type === 'chords') {
       const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
-      const d = prog && prog.steps[_step];
+      let d = prog && prog.steps[_step];
+
+      // Drums → Chords: retrigger current chord on snare steps (even if not a chord step)
+      if (d == null && _modDepth('drummer', 'chords') > 0 && _xm_snareFired
+          && _modState.prevChordDeg != null) {
+        d = _modState.prevChordDeg;
+      }
       if (d == null) return;
-      const freqs = [d, d + 2, d + 4].map(x => _tonalityUtil.scaleDegreeFreq(CHORD_BASE_FREQ, _root, x));
+
+      // Bass → Chords: bass rotation spreads the top chord note upward
+      let topDeg = d + 4;
+      const bCDepth = _modDepth('bass', 'chords');
+      if (bCDepth > 0) {
+        const bm = Object.values(activeModules).find(x => x.def.type === 'bass');
+        if (bm) {
+          const bassT = bm.smoother.get() / (2 * Math.PI); // [0,1]
+          topDeg += Math.round(bassT * bCDepth * 7);        // spread up to one extra octave
+        }
+      }
+
+      // Melody → Chords: inversion that puts melody note on top
+      if (_modDepth('lead', 'chords') > 0.5 && _xm_melodyDeg != null
+          && _xm_melodyDeg > topDeg) {
+        topDeg = topDeg + 7; // raise top note one octave to sit above melody
+      }
+
+      const freqs = [d, d + 2, topDeg].map(
+        x => _tonalityUtil.scaleDegreeFreq(CHORD_BASE_FREQ, _root, x)
+      );
       try { m.node.triggerAttackRelease(freqs, '2n', time); } catch (_) {}
+
     } else if (m.def.type === 'lead') {
       const mel = _melodyLines.MELODY_LINES[m.presetIdx];
-      const deg = mel && mel.steps[_step];
+      let deg = mel && mel.steps[_step];
       if (deg == null) return;
-      try { m.node.triggerAttackRelease(_tonalityUtil.scaleDegreeFreq(LEAD_BASE_FREQ, _root, deg), '8n', time); } catch (_) {}
+
+      // Drums → Melody: kick gates melody — skip this step if kick didn't fire
+      if (_modDepth('drummer', 'lead') > 0 && !_xm_kickFired
+          && Math.random() < _modDepth('drummer', 'lead')) return;
+
+      // Bass → Melody: bass root pulls melody toward unison (one octave above bass)
+      if (_modDepth('bass', 'lead') > 0 && _xm_bassDeg != null
+          && Math.random() < _modDepth('bass', 'lead')) {
+        deg = _xm_bassDeg + 7; // same scale degree, one octave up
+      }
+
+      // Chords → Melody: snap to nearest chord tone
+      if (_modDepth('chords', 'lead') > 0 && _xm_chordDeg != null
+          && Math.random() < _modDepth('chords', 'lead')) {
+        const tones = [_xm_chordDeg, _xm_chordDeg + 2, _xm_chordDeg + 4];
+        deg = tones.reduce((best, t) =>
+          Math.abs(t - deg) < Math.abs(best - deg) ? t : best, tones[0]
+        );
+      }
+
+      try { m.node.triggerAttackRelease(
+        _tonalityUtil.scaleDegreeFreq(LEAD_BASE_FREQ, _root, deg), '8n', time
+      ); } catch (_) {}
     }
   });
 }
@@ -420,6 +550,20 @@ let _activeLinks = {};     // lfoId -> targetId currently modulated
 let _lfoPhase = {};        // lfoId -> running phase (radians)
 let _lastModTime = null;   // performance.now() of the last modulation tick
 
+// Cross-modulation state (Phase 9)
+let _modulations = new Map();          // set each detection frame by setModulations()
+const _modState = {
+  prevChordDeg: null,                  // tracks chord changes for fill triggering
+  fillStepsRemaining: 0,               // countdown: how many steps the fill lasts
+  melodyHistory: [],                   // last 3 melody degrees for contour detection
+};
+
+function setModulations(map) { _modulations = map || new Map(); }
+function _modDepth(src, dst) {
+  const m = _modulations.get(`${src}:${dst}`);
+  return m ? m.depth : 0;
+}
+
 // Apply one LFO's modulation to its target's parameter (JS-driven, option B:
 // the target's rotation sets the center; the LFO oscillates around it).
 function _applyLfoMod(lfoMod, tgt, s) {
@@ -581,4 +725,5 @@ window.getSeqStep         = getSeqStep;
 window.getSeqPulses       = getSeqPulses;
 window.getModuleLevel     = getModuleLevel;
 window.getLfoRate         = getLfoRate;
+window.setModulations     = setModulations;
 window.getLoopPeaks       = getLoopPeaks;
