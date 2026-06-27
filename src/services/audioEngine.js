@@ -318,8 +318,6 @@ function _updateModule(id, marker) {
   if (m.def.type === 'oscillator' && m.node) {
     // 50ms ramp — smooths pitch between detection frames without perceptible lag
     m.node.frequency.rampTo(_oscFreq(m.def, angle), 0.05);
-  } else if (m.def.type === 'global' && m.def.subtype === 'volume' && master) {
-    master.volume.rampTo(m.def.getVolDb(angle), 0.05);
   } else if (m.def.type === 'effect' && m.node && !_lfoTargets.has(m.def.id)) {
     // While an LFO drives this effect, its rotation feeds the LFO window instead
     // (handled in applyRoutingPlan), so skip the direct ramp to avoid fighting it.

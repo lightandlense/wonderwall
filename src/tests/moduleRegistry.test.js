@@ -2,25 +2,28 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 // Stub the Tone global the registry closes over (makeNode is never called here).
-global.Tone = { Filter: function () {}, FeedbackDelay: function () {} };
+global.Tone = { Filter: function () {}, FeedbackDelay: function () {}, Reverb: function () {}, Distortion: function () {} };
 const tonality = require('../utils/tonality.js');
 global.tonality = tonality; // registry uses global tonality in browser; mirror for Node
 const MODULE_REGISTRY = require('../services/moduleRegistry.js');
 
 test('registry has the modules with correct types', () => {
-  assert.strictEqual(MODULE_REGISTRY[0].type, 'bass');     // was oscillator (Phase 8)
+  assert.strictEqual(MODULE_REGISTRY[0].type, 'bass');
   assert.strictEqual(MODULE_REGISTRY[1].type, 'effect');
   assert.strictEqual(MODULE_REGISTRY[1].subtype, 'filter');
   assert.strictEqual(MODULE_REGISTRY[2].subtype, 'delay');
-  assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
-  assert.strictEqual(MODULE_REGISTRY[4].type, 'lead');   // was lfo (Phase 9)
+  assert.strictEqual(MODULE_REGISTRY[3].type, 'effect');
+  assert.strictEqual(MODULE_REGISTRY[3].subtype, 'reverb');
+  assert.strictEqual(MODULE_REGISTRY[4].type, 'lead');
   assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
+  assert.strictEqual(MODULE_REGISTRY[9].type, 'effect');
+  assert.strictEqual(MODULE_REGISTRY[9].subtype, 'distortion');
 });
 
-test('ID 3 is a global Volume control; ID 6 is the Chords generator', () => {
-  assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
-  assert.strictEqual(MODULE_REGISTRY[3].subtype, 'volume');
-  assert.strictEqual(MODULE_REGISTRY[6].type, 'chords');   // was sequencer (Phase 8)
+test('ID 3 is Reverb; ID 6 is the Chords generator', () => {
+  assert.strictEqual(MODULE_REGISTRY[3].type, 'effect');
+  assert.strictEqual(MODULE_REGISTRY[3].subtype, 'reverb');
+  assert.strictEqual(MODULE_REGISTRY[6].type, 'chords');
 });
 
 test('calibration IDs are NOT in the registry', () => {

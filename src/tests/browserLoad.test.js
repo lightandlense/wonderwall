@@ -47,8 +47,10 @@ function makeSandbox() {
   class MetalSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   class MonoSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   class PolySynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
+  class Reverb extends Node { constructor() { super(); this.wet = { value: 0, rampTo() {} }; } }
+  class Distortion extends Node { constructor() { super(); this.distortion = 0; } }
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
-    Gain, MembraneSynth, NoiseSynth, MetalSynth, MonoSynth, PolySynth,
+    Gain, MembraneSynth, NoiseSynth, MetalSynth, MonoSynth, PolySynth, Reverb, Distortion,
     start: async () => {},
     Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 

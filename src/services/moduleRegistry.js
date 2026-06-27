@@ -51,12 +51,14 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.feedback.rampTo(this.centerValue(t), 0.05); },
   },
 
-  // ID 3: Volume — global master-volume control (no longer in the signal path;
-  // the master output is the always-on center hub)
+  // ID 3: Reverb — rotation controls wet/dry mix (0 = dry, full = 85% wet)
   3: {
-    id: 3, name: 'Volume', type: 'global', subtype: 'volume', color: '#ffcc44', paramLabel: 'Volume',
+    id: 3, name: 'Reverb', type: 'effect', subtype: 'reverb', color: '#44ccff',
+    paramLabel: 'Wet',
     getParamT(angle) { return _arcT(angle); },
-    getVolDb(angle) { return -40 + _arcT(angle) * 40; }, // -40 dB .. 0 dB
+    centerValue(t) { return t * 0.85; },
+    makeNode() { return new Tone.Reverb({ decay: 2.5, wet: 0 }); },
+    applyParam(node, t) { node.wet.rampTo(t * 0.85, 0.05); },
   },
 
   // ID 4: Lead — self-playing melody generator; rotation picks the line, key from Tonality.
@@ -122,6 +124,16 @@ const MODULE_REGISTRY = {
     id: 8, name: 'Tempo', type: 'global', subtype: 'tempo', color: '#ff7777', paramLabel: 'BPM',
     getParamT(angle) { return _arcT(angle); },
     getBpm(angle) { return Math.round(70 + _arcT(angle) * (160 - 70)); },
+  },
+
+  // ID 9: Distortion — rotation controls drive (0 = clean, full = heavy saturation)
+  9: {
+    id: 9, name: 'Distortion', type: 'effect', subtype: 'distortion', color: '#ff6633',
+    paramLabel: 'Drive',
+    getParamT(angle) { return _arcT(angle); },
+    centerValue(t) { return t * 0.9; },
+    makeNode() { return new Tone.Distortion({ distortion: 0, wet: 1 }); },
+    applyParam(node, t) { node.distortion = t * 0.9; },
   },
 };
 
