@@ -78,18 +78,19 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 7: Loop — sampler generator; rotation selects a loop from the bank
+  // ID 7: Drummer — drum-machine generator; rotation selects a preset groove.
+  // (Replaced the Loop/sampler puck; loopBank.js + assets/loops kept for future reuse.)
   7: {
-    id: 7, name: 'Loop', type: 'sampler', color: '#7CFFB2', paramLabel: 'Loop',
+    id: 7, name: 'Drummer', type: 'drummer', color: '#ff5d8f', paramLabel: 'Groove',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const n = lb.LOOP_BANK.length;
+    getGrooveIndex(angle) {
+      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
+      const n = dg.DRUM_GROOVES.length;
       return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
     },
     getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      return lb.LOOP_BANK[this.getLoopIndex(angle)].name;
+      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
+      return dg.DRUM_GROOVES[this.getGrooveIndex(angle)].name;
     },
   },
 

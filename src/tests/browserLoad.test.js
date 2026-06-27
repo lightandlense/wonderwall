@@ -41,7 +41,12 @@ function makeSandbox() {
     sync() { return this; } unsync() { return this; } start() { return this; } stop() { return this; } restart() { return this; }
   }
   const ToneAudioBuffer = { fromUrl: async () => ({ toArray: () => new Float32Array([0, 0.5, -0.5, 1, -1, 0.25]), duration: 2 }) };
+  class Gain extends Node { constructor() { super(); } }
+  class MembraneSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
+  class NoiseSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
+  class MetalSynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
+    Gain, MembraneSynth, NoiseSynth, MetalSynth,
     start: async () => {},
     Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 
@@ -67,6 +72,7 @@ const SCRIPTS = [
   'src/utils/rhythmPatterns.js',
   'src/utils/cableAnim.js',
   'src/data/loopBank.js',
+  'src/data/drumGrooves.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',
   'src/components/visualEngine.js',
@@ -179,7 +185,7 @@ test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
   assert.ok(rate >= 0.1 && rate <= 8, 'lfo rate within design range');
 });
 
-test('Loop + Tempo pucks: play through master, expose peaks, set tempo', async () => {
+test('Drummer + Tempo pucks: drummer plays through master; groove rotates clean', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
   const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
@@ -194,44 +200,16 @@ test('Loop + Tempo pucks: play through master, expose peaks, set tempo', async (
   };`, ctx);
   await vm.runInContext('initAudio()', ctx);
 
-  const loop = { id: 7, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const drum = { id: 7, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const tempo = { id: 8, wx: 600, wy: 600, angle: 3, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([loop, tempo]);
+  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([drum, tempo]);
 
-  assert.ok(ctx.__synthReachesDest(), 'loop player should reach the master/destination');
-  const peaks = vm.runInContext('getLoopPeaks(7)', ctx);
-  assert.ok(Array.isArray(peaks) && peaks.length > 0, 'loop exposes a peak envelope');
+  assert.ok(ctx.__synthReachesDest(), 'drummer should reach the master/destination');
   assert.strictEqual(vm.runInContext('typeof getModuleLevel(7)', ctx), 'number');
-  // Rotate the loop puck to a different bank index — exercises the loop-swap (restart) path.
+  // Rotate the drummer to a different groove — no throw.
   assert.doesNotThrow(() => {
-    const loopRot = { id: 7, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: loop.screenCorners };
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loopRot, tempo]);
+    const drumRot = { id: 7, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: drum.screenCorners };
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drumRot, tempo]);
   });
-  assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]); });
-});
-
-test('controllers can drive the loop: seq gate + lfo wobble run clean', async () => {
-  const ctx = makeSandbox();
-  loadAll(ctx);
-  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
-  ctx.__fakeCtx = fakeCtx;
-  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
-  vm.runInContext(`window.onMarkersDetected = function (d) {
-    reconcileModules(d); const a = getActiveModules();
-    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
-    updateModulation();
-  };`, ctx);
-  await vm.runInContext('initAudio()', ctx);
-
-  const loop = { id: 7, wx: 400, wy: 400, angle: 0 };
-  const seq  = { id: 6, wx: 440, wy: 420, angle: 0 };   // near the loop -> sequencer gates it
-  const lfo  = { id: 4, wx: 440, wy: 420, angle: 1 };   // near the loop -> lfo wobbles it
-
-  assert.doesNotThrow(() => {
-    for (let i = 0; i < 8; i++) ctx.onMarkersDetected([loop, seq]);  // gate on (loop stops free-run)
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]);       // gate off (loop resumes)
-    for (let i = 0; i < 8; i++) ctx.onMarkersDetected([loop, lfo]);  // lfo wobbles playbackRate
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([loop]);       // lfo removed
-  });
-  assert.ok(ctx.__synthReachesDest(), 'loop still reaches master after controller links');
+  assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drum]); });
 });

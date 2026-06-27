@@ -17,8 +17,19 @@ const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonali
 const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+const _drumGrooves = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
+
+// Build the three drum voices for a Drummer puck, mixed into one output node.
+function _makeDrums() {
+  const out = new Tone.Gain();
+  const kick = new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.05, envelope: { attack: 0.001, decay: 0.4, sustain: 0 } });
+  const snare = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 }, volume: -6 });
+  const hat = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.06, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 6000, octaves: 1.5, volume: -18 });
+  kick.connect(out); snare.connect(out); hat.connect(out);
+  return { out, kick, snare, hat };
+}
 
 // Sequencer clock state
 let _step = 0;             // current 16th-note step (0..STEPS-1)
@@ -108,6 +119,17 @@ function _onStep(time) {
     }
     try { tgt.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
   });
+
+  // Drummer pucks play their own groove on every step (self-contained drum machine).
+  Object.keys(activeModules).forEach(idStr => {
+    const m = activeModules[idStr];
+    if (!m || m.def.type !== 'drummer' || !m.drums) return;
+    const groove = _drumGrooves.DRUM_GROOVES[m.grooveIdx];
+    if (!groove) return;
+    if (groove.kick[_step])  { try { m.drums.kick.triggerAttackRelease('C1', '8n', time); } catch (_) {} }
+    if (groove.snare[_step]) { try { m.drums.snare.triggerAttackRelease('16n', time); } catch (_) {} }
+    if (groove.hat[_step])   { try { m.drums.hat.triggerAttackRelease('32n', time); } catch (_) {} }
+  });
 }
 
 function getSeqStep() { return _step; }
@@ -141,6 +163,8 @@ function _addModule(id, marker) {
   let node = null;
   let meter = null;
   let loopIdx = -1;
+  let drums = null;
+  let grooveIdx = 0;
 
   if (def.type === 'oscillator') {
     // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
@@ -174,6 +198,12 @@ function _addModule(id, marker) {
     } else {
       console.warn('[audio] Loop puck: no buffer for', entry.file, '— serve over http (npm start) so loops can load.');
     }
+  } else if (def.type === 'drummer') {
+    grooveIdx = def.getGrooveIndex(smoother.get());
+    drums = _makeDrums();           // kick/snare/hat -> drums.out; _onStep triggers them
+    node = drums.out;               // routing connects this to the center master
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    node.connect(meter);
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
@@ -185,6 +215,8 @@ function _addModule(id, marker) {
     node,
     meter,
     loopIdx,
+    drums,
+    grooveIdx,
     smoother,
     missCount: 0,
     lastPos: { wx: marker.wx, wy: marker.wy },
@@ -198,6 +230,7 @@ function _removeModule(id) {
   if (!m) return;
 
   if (m.meter) { try { m.meter.dispose(); } catch (_) {} }
+  if (m.drums) { ['kick', 'snare', 'hat', 'out'].forEach(k => { try { m.drums[k].dispose(); } catch (_) {} }); }
 
   if (m.def.type === 'oscillator' && m.node) {
     m.node.triggerRelease();
@@ -239,6 +272,8 @@ function _updateModule(id, marker) {
       const entry = _loopBank.LOOP_BANK[m.loopIdx];
       if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
     }
+  } else if (m.def.type === 'drummer') {
+    m.grooveIdx = m.def.getGrooveIndex(angle);   // rotation picks the groove; _onStep reads it
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);

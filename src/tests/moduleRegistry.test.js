@@ -53,14 +53,14 @@ test('filter cutoff center rises with rotation; delay feedback within bounds', (
   assert.ok(dly.centerValue(0) >= 0 && dly.centerValue(1) <= 0.85);
 });
 
-test('Loop (id 7): rotation selects a bank index', () => {
-  const loop = MODULE_REGISTRY[7];
-  assert.strictEqual(loop.type, 'sampler');
+test('Drummer (id 7): rotation selects a groove index', () => {
+  const drum = MODULE_REGISTRY[7];
+  assert.strictEqual(drum.type, 'drummer');
   // _arcT(3*PI/2) saturates to 0 -> first; _arcT(PI/4) = 1 -> last.
-  const n = require('../data/loopBank.js').LOOP_BANK.length;
-  assert.strictEqual(loop.getLoopIndex(3 * Math.PI / 2), 0);
-  assert.strictEqual(loop.getLoopIndex(Math.PI / 4), n - 1);
-  assert.strictEqual(typeof loop.getName(3 * Math.PI / 2), 'string');
+  const n = require('../data/drumGrooves.js').DRUM_GROOVES.length;
+  assert.strictEqual(drum.getGrooveIndex(3 * Math.PI / 2), 0);
+  assert.strictEqual(drum.getGrooveIndex(Math.PI / 4), n - 1);
+  assert.strictEqual(typeof drum.getName(3 * Math.PI / 2), 'string');
 });
 
 test('Tempo (id 8): rotation maps to 70..160 BPM', () => {
