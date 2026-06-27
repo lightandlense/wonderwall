@@ -20,8 +20,10 @@ const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js
 const _drumGrooves = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
 const _bassLines = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
 const _chordProgs = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+const _melodyLines = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
 const BASS_BASE_FREQ = 65.41;    // C2 anchor for the bass register
 const CHORD_BASE_FREQ = 261.63;  // C4 anchor for the chord pad
+const LEAD_BASE_FREQ = 523.25;   // C5 anchor for the lead (sits above bass + pad)
 const DEFAULT_ROOT = 0;          // C, when no Tonality puck is present
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
@@ -152,6 +154,11 @@ function _onStep(time) {
       if (d == null) return;
       const freqs = [d, d + 2, d + 4].map(x => _tonalityUtil.scaleDegreeFreq(CHORD_BASE_FREQ, _root, x));
       try { m.node.triggerAttackRelease(freqs, '2n', time); } catch (_) {}
+    } else if (m.def.type === 'lead') {
+      const mel = _melodyLines.MELODY_LINES[m.presetIdx];
+      const deg = mel && mel.steps[_step];
+      if (deg == null) return;
+      try { m.node.triggerAttackRelease(_tonalityUtil.scaleDegreeFreq(LEAD_BASE_FREQ, _root, deg), '8n', time); } catch (_) {}
     }
   });
 }
@@ -248,6 +255,15 @@ function _addModule(id, marker) {
     });
     meter = new Tone.Meter({ smoothing: 0.8 });
     node.connect(meter);
+  } else if (def.type === 'lead') {
+    presetIdx = def.getMelodyIndex(smoother.get());
+    node = new Tone.Synth({
+      oscillator: { type: 'square' },
+      envelope: { attack: 0.005, decay: 0.12, sustain: 0.25, release: 0.18 },
+      volume: -16,
+    });
+    meter = new Tone.Meter({ smoothing: 0.8 });
+    node.connect(meter);
   } else if (def.type === 'controller') {
     node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
@@ -322,6 +338,8 @@ function _updateModule(id, marker) {
     m.presetIdx = m.def.getLineIndex(angle);
   } else if (m.def.type === 'chords') {
     m.presetIdx = m.def.getProgIndex(angle);
+  } else if (m.def.type === 'lead') {
+    m.presetIdx = m.def.getMelodyIndex(angle);
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);

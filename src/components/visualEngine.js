@@ -127,7 +127,7 @@ const visualEngine = (() => {
 
       // Param value below the ring — loop name for samplers, percentage otherwise
       const paramPct = Math.round(paramT * 100);
-      const belowLabel = ((def.type === 'sampler' || def.type === 'drummer' || def.type === 'bass' || def.type === 'chords') && def.getName)
+      const belowLabel = ((def.type === 'sampler' || def.type === 'drummer' || def.type === 'bass' || def.type === 'chords' || def.type === 'lead') && def.getName)
         ? `${def.paramLabel}: ${def.getName(angle)}`
         : `${def.paramLabel}: ${paramPct}%`;
       visCtx.save();

@@ -59,11 +59,20 @@ const MODULE_REGISTRY = {
     getVolDb(angle) { return -40 + _arcT(angle) * 40; }, // -40 dB .. 0 dB
   },
 
-  // ID 4: LFO — controller; rotation controls modulation rate
+  // ID 4: Lead — self-playing melody generator; rotation picks the line, key from Tonality.
+  // (Replaced the LFO; LFO audio code left dormant.)
   4: {
-    id: 4, name: 'LFO', type: 'controller', subtype: 'lfo', color: '#c98bff', paramLabel: 'Rate',
+    id: 4, name: 'Lead', type: 'lead', color: '#c98bff', paramLabel: 'Melody',
     getParamT(angle) { return _arcT(angle); },
-    getRateHz(angle) { return _expMap(_arcT(angle), 0.1, 8); }, // 0.1 .. 8 Hz
+    getMelodyIndex(angle) {
+      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
+      const n = ml.MELODY_LINES.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
+      return ml.MELODY_LINES[this.getMelodyIndex(angle)].name;
+    },
   },
 
   // ID 5: Tonality — global; rotation selects root pitch class

@@ -77,6 +77,7 @@ const SCRIPTS = [
   'src/data/drumGrooves.js',
   'src/data/bassLines.js',
   'src/data/chordProgressions.js',
+  'src/data/melodyLines.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',
   'src/components/visualEngine.js',

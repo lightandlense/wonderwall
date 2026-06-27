@@ -135,3 +135,9 @@ test('buildRawPlan: bass and chords are generators (chain to master)', () => {
   const pc = routingGraph.buildRawPlan([chordsMod(6, 480, 480)], VP, new Set());
   assert.deepStrictEqual(pc.chains[0].nodeIds, [6, 'master']);
 });
+
+const leadMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'lead' } });
+test('buildRawPlan: lead is a generator (chain to master)', () => {
+  const p = routingGraph.buildRawPlan([leadMod(4, 480, 480)], VP, new Set());
+  assert.deepStrictEqual(p.chains[0].nodeIds, [4, 'master']);
+});

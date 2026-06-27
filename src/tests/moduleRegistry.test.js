@@ -13,7 +13,7 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[1].subtype, 'filter');
   assert.strictEqual(MODULE_REGISTRY[2].subtype, 'delay');
   assert.strictEqual(MODULE_REGISTRY[3].type, 'global');
-  assert.strictEqual(MODULE_REGISTRY[4].subtype, 'lfo');
+  assert.strictEqual(MODULE_REGISTRY[4].type, 'lead');   // was lfo (Phase 9)
   assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
 });
 
@@ -78,4 +78,13 @@ test('Chords (id 6): rotation selects a progression; type chords', () => {
   assert.strictEqual(ch.getProgIndex(3 * Math.PI / 2), 0);
   assert.strictEqual(ch.getProgIndex(Math.PI / 4), n - 1);
   assert.strictEqual(typeof ch.getName(3 * Math.PI / 2), 'string');
+});
+
+test('Lead (id 4): rotation selects a melody; type lead', () => {
+  const lead = MODULE_REGISTRY[4];
+  assert.strictEqual(lead.type, 'lead');
+  const n = require('../data/melodyLines.js').MELODY_LINES.length;
+  assert.strictEqual(lead.getMelodyIndex(3 * Math.PI / 2), 0);
+  assert.strictEqual(lead.getMelodyIndex(Math.PI / 4), n - 1);
+  assert.strictEqual(typeof lead.getName(3 * Math.PI / 2), 'string');
 });
