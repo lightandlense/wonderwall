@@ -27,7 +27,6 @@ function buildRawPlan(modules, viewport, prevMembership) {
   const tonalityMod = modules.find(m => m.def.type === 'global' && m.def.subtype === 'tonality');
 
   const membership = new Set();
-  const claimed = new Set();
 
   const chains = gens.map(gen => {
     const nodes = [gen.id];
@@ -37,7 +36,7 @@ function buildRawPlan(modules, viewport, prevMembership) {
       let best = null, bestDist = Infinity;
       const curToC = _dist(current, C);
       effects.forEach(e => {
-        if (claimed.has(e.id) || nodes.includes(e.id)) return;
+        if (nodes.includes(e.id)) return;                // already in this gen's chain
         if (_dist(e, C) >= curToC) return;               // must progress toward center
         const reach = prev.has(`${gen.id}:${e.id}`) ? KEEP : R;
         const d = _dist(current, e);
@@ -50,7 +49,6 @@ function buildRawPlan(modules, viewport, prevMembership) {
     }
     nodes.push('master');                                 // osc ALWAYS reaches center
     localMembers.forEach(m => membership.add(m));
-    nodes.slice(1, -1).forEach(id => claimed.add(id));
     return { genId: gen.id, nodeIds: nodes };
   });
 
