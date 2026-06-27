@@ -58,8 +58,6 @@ let _lfoTargets = new Set();
 // Always-on central master output (the wall-center hub). Created in initAudio,
 // always wired to the speaker; every chain terminates here.
 let master = null;
-// Shared pre-master bus. All generators connect here; effects insert between bus and master.
-let bus = null;
 
 // Must be called once from a user gesture (click) to resume the AudioContext.
 async function initAudio() {
@@ -67,8 +65,6 @@ async function initAudio() {
   await Tone.start();
   await preloadLoops();                         // decode loop buffers + peak envelopes
   master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
-  bus = new Tone.Gain(1);
-  bus.connect(master);                          // shared pre-master bus; effects insert between bus and master
   Tone.Transport.bpm.value = 110;               // BPM
   _step = 0;
   _stepLoop = new Tone.Loop((time) => { _onStep(time); }, '16n').start(0);
@@ -305,7 +301,6 @@ function _removeModule(id) {
     try { m.node.dispose(); } catch (_) {}
   }
 
-  _lastGenBusKeys.delete(id);
   delete activeModules[id];
   console.log(`[audio] removed module ID ${id}`);
 }
@@ -422,9 +417,7 @@ function reconcileModules(markers) {
   });
 }
 
-let _lastChainKeys = {};   // unused – kept to avoid ref errors
-let _lastBusChainKey = '';   // effects chain key for bus debouncing
-let _lastGenBusKeys = new Set(); // genIds currently wired gen → bus
+let _lastChainKeys = {};   // genId -> last applied "a>b>c" string
 let _activeLinks = {};     // lfoId -> targetId currently modulated
 let _lfoPhase = {};        // lfoId -> running phase (radians)
 let _lastModTime = null;   // performance.now() of the last modulation tick
@@ -477,52 +470,38 @@ function applyRoutingPlan(plan) {
   if (!audioInitialized) return;
   _tonality = plan.tonality;
 
-  // ---- audio chains: shared bus — all generators → bus → effects → master ----
-  // Every generator feeds the same bus so Filter/Delay affect the whole band.
+  // ---- audio chains (per-generator spatial routing) ----
+  // Each generator's cable routes through whichever effects its path crosses.
+  // Multiple generators can fan into the same effect node (Web Audio fan-in is valid).
   const nodeOf = (id) => (id === 'master' ? master : (activeModules[id] && activeModules[id].node));
 
-  // Collect unique effect IDs across all chains in spatial order (gen-proximal first)
-  const effectOrder = [];
-  const effectSeen = new Set();
+  const seenGen = new Set();
   plan.chains.forEach(chain => {
+    seenGen.add(chain.genId);
+    const key = chain.nodeIds.join('>');
+    if (_lastChainKeys[chain.genId] === key) return; // unchanged
+    _lastChainKeys[chain.genId] = key;
+
+    chain.nodeIds.forEach(id => {
+      if (id === 'master') return;
+      const n = nodeOf(id);
+      if (n) { try { n.disconnect(); } catch (_) {} }
+    });
+
+    for (let i = 0; i < chain.nodeIds.length - 1; i++) {
+      const a = nodeOf(chain.nodeIds[i]);
+      const b = nodeOf(chain.nodeIds[i + 1]);
+      if (a && b) { try { a.connect(b); } catch (_) {} }
+    }
+    // Reconnect effect meter taps (n.disconnect() removes outgoing connections including the tap)
     chain.nodeIds.forEach(id => {
       if (id === 'master') return;
       const m = activeModules[id];
-      if (m && m.def.type === 'effect' && !effectSeen.has(id)) {
-        effectSeen.add(id);
-        effectOrder.push(id);
-      }
+      if (m && m.meter && m.def.type === 'effect') { try { nodeOf(id).connect(m.meter); } catch (_) {} }
     });
+    console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
   });
-
-  // Rewire bus → [effects] → master whenever the effects chain changes
-  const busChainKey = effectOrder.join('>');
-  if (busChainKey !== _lastBusChainKey) {
-    _lastBusChainKey = busChainKey;
-    try { bus.disconnect(); } catch (_) {}
-    effectOrder.forEach(id => { const n = nodeOf(id); if (n) { try { n.disconnect(); } catch (_) {} } });
-    const busNodes = [bus, ...effectOrder.map(id => nodeOf(id)).filter(Boolean), master];
-    for (let i = 0; i < busNodes.length - 1; i++) { try { busNodes[i].connect(busNodes[i + 1]); } catch (_) {} }
-    // Reconnect effect meter taps (n.disconnect() removes them)
-    effectOrder.forEach(id => { const m = activeModules[id]; if (m && m.meter) { try { nodeOf(id).connect(m.meter); } catch (_) {} } });
-    console.log('[audio] bus chain:', ['bus', ...effectOrder, 'master'].join('->'));
-  }
-
-  // Wire each newly-visible generator to the bus (one-time per module lifetime)
-  const seenGen = new Set(plan.chains.map(c => c.genId));
-  plan.chains.forEach(chain => {
-    if (_lastGenBusKeys.has(chain.genId)) return;
-    _lastGenBusKeys.add(chain.genId);
-    const genNode = nodeOf(chain.genId);
-    if (genNode) {
-      try { genNode.disconnect(); } catch (_) {}
-      try { genNode.connect(bus); } catch (_) {}
-      const m = activeModules[chain.genId];
-      if (m && m.meter) { try { genNode.connect(m.meter); } catch (_) {} }
-    }
-    console.log(`[audio] gen ${chain.genId} -> bus`);
-  });
-  _lastGenBusKeys.forEach(id => { if (!seenGen.has(id)) _lastGenBusKeys.delete(id); });
+  Object.keys(_lastChainKeys).forEach(g => { if (!seenGen.has(Number(g))) delete _lastChainKeys[g]; });
 
   // ---- controller links (JS-driven; no audio-graph connections) ----
   // Track which controller drives which target; _onStep / updateModulation act on it.
