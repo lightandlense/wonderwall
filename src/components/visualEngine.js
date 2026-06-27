@@ -14,6 +14,7 @@ const visualEngine = (() => {
   const RING_ALPHA_MIN = 0.15, RING_ALPHA_MAX = 0.7;     // pulse glow alpha range
   const HUB_COLOR = '#88ffcc';                           // master output color
   let _lastMarkers = [], _lastEdges = []; // cached frame state, drawn every rAF by render()
+  let _modEdges = []; // modulation cables, updated each detection frame
 
   function init(visCanvas, dbgCanvas) {
     visCtx   = visCanvas.getContext('2d');
@@ -24,6 +25,10 @@ const visualEngine = (() => {
   function setFrame(markers, edges) {
     _lastMarkers = markers || [];
     _lastEdges = edges || [];
+  }
+
+  function setModulationEdges(edges) {
+    _modEdges = edges || [];
   }
 
   // Back-compat: cache + draw in one call (used by tests and any direct callers).
@@ -58,6 +63,11 @@ const visualEngine = (() => {
     // Draw edges beneath module rings so rings appear on top
     if (edges && edges.length > 0) {
       _drawEdges(edges, activeById);
+    }
+
+    // Modulation cables (Phase 9) — drawn above patch cables, below rings
+    if (_modEdges.length > 0) {
+      _drawModulationCables(_modEdges);
     }
 
     // Draw a ring + param arc for each detected marker that has an active module
@@ -454,7 +464,57 @@ const visualEngine = (() => {
     });
   }
 
-  return { init, draw, setFrame, render };
+  // Draws thin particle cables for cross-modulation connections (Phase 9).
+  // Called after _drawEdges so modulation cables render on top of patch cables.
+  function _drawModulationCables(edges) {
+    if (!visCtx || !edges || edges.length === 0) return;
+    const now = (typeof performance !== 'undefined') ? performance.now() : 0;
+
+    edges.forEach(edge => {
+      const { fromPos, toPos, depth, srcColor } = edge;
+      if (!(depth > 0)) return;
+      const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+      const len = Math.hypot(dx, dy);
+      if (len === 0) return;
+      const ux = dx / len, uy = dy / len;
+
+      // Dim dashed base line — fades in as pucks approach
+      visCtx.save();
+      visCtx.globalAlpha = depth * 0.35;
+      visCtx.strokeStyle = srcColor;
+      visCtx.lineWidth = 1;
+      visCtx.setLineDash([4, 7]);
+      visCtx.shadowColor = srcColor;
+      visCtx.shadowBlur = 5;
+      visCtx.beginPath();
+      visCtx.moveTo(fromPos.x, fromPos.y);
+      visCtx.lineTo(toPos.x, toPos.y);
+      visCtx.stroke();
+      visCtx.setLineDash([]);
+      visCtx.restore();
+
+      // Flowing directional particles — denser at higher depth
+      const speed = 80;
+      const spacing = Math.max(10, 35 - depth * 20); // 35px sparse → 15px dense
+      const dots = _anim.flowDotDistances(len, spacing, speed, now);
+      dots.forEach(d => {
+        const x = fromPos.x + ux * d;
+        const y = fromPos.y + uy * d;
+        visCtx.save();
+        visCtx.globalCompositeOperation = 'lighter';
+        visCtx.globalAlpha = depth * 0.75;
+        visCtx.fillStyle = srcColor;
+        visCtx.shadowColor = srcColor;
+        visCtx.shadowBlur = 12;
+        visCtx.beginPath();
+        visCtx.arc(x, y, 2, 0, 2 * Math.PI);
+        visCtx.fill();
+        visCtx.restore();
+      });
+    });
+  }
+
+  return { init, draw, setFrame, render, setModulationEdges };
 })();
 
 window.visualEngine = visualEngine;
