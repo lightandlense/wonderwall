@@ -38,7 +38,7 @@ function makeSandbox() {
   class Meter extends Node { constructor() { super(); } getValue() { return -100; } }
   class Player extends Node {
     constructor() { super(); this.playbackRate = 1; this.buffer = null; synths.push(this); }
-    sync() { return this; } start() { return this; } stop() { return this; } restart() { return this; }
+    sync() { return this; } unsync() { return this; } start() { return this; } stop() { return this; } restart() { return this; }
   }
   const ToneAudioBuffer = { fromUrl: async () => ({ toArray: () => new Float32Array([0, 0.5, -0.5, 1, -1, 0.25]), duration: 2 }) };
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,

@@ -433,7 +433,9 @@ function applyRoutingPlan(plan) {
     if (!_sequencedOscs.has(tid)) {
       const m = activeModules[tid];
       if (!m || !m.node) return;
-      if (m.def.type === 'sampler') { try { m.node.stop(); } catch (_) {} }
+      // Hand the loop to the sequencer: un-sync so _onStep can retrigger it on audio-clock
+      // time (same domain as the oscillator), then silence the free-run until the first hit.
+      if (m.def.type === 'sampler') { try { m.node.stop(); m.node.unsync(); } catch (_) {} }
       else { try { m.node.triggerRelease(); } catch (_) {} }
     }
   });
@@ -441,7 +443,7 @@ function applyRoutingPlan(plan) {
     if (!nowSeq.has(tid)) {
       const m = activeModules[tid];
       if (!m || !m.node) return;
-      if (m.def.type === 'sampler') { try { m.node.start('@1m'); } catch (_) {} }
+      if (m.def.type === 'sampler') { try { m.node.stop(); m.node.sync().start('@1m'); } catch (_) {} } // resume synced free-run
       else { try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {} }
     }
   });
