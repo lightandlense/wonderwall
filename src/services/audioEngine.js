@@ -429,22 +429,21 @@ function applyRoutingPlan(plan) {
   });
   // Gate transitions: newly sequenced target goes quiet (osc stops droning, loop stops
   // free-running so _onStep can stutter it); un-sequenced resumes.
+  // Only oscillators are gated (drone off while sequenced). A sampler keeps its synced
+  // free-run playing — _onStep retriggers it in place (restart), the same call loop-swap
+  // uses successfully. Stopping it here is what made it go silent, so we don't.
   nowSeq.forEach(tid => {
     if (!_sequencedOscs.has(tid)) {
       const m = activeModules[tid];
-      if (!m || !m.node) return;
-      // Hand the loop to the sequencer: un-sync so _onStep can retrigger it on audio-clock
-      // time (same domain as the oscillator), then silence the free-run until the first hit.
-      if (m.def.type === 'sampler') { try { m.node.stop(); m.node.unsync(); } catch (_) {} }
-      else { try { m.node.triggerRelease(); } catch (_) {} }
+      if (m && m.node && m.def.type === 'oscillator') { try { m.node.triggerRelease(); } catch (_) {} }
     }
   });
   _sequencedOscs.forEach(tid => {
     if (!nowSeq.has(tid)) {
       const m = activeModules[tid];
-      if (!m || !m.node) return;
-      if (m.def.type === 'sampler') { try { m.node.stop(); m.node.sync().start('@1m'); } catch (_) {} } // resume synced free-run
-      else { try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {} }
+      if (m && m.node && m.def.type === 'oscillator') {
+        try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {}
+      }
     }
   });
   _sequencedOscs = nowSeq;
