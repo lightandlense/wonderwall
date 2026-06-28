@@ -52,11 +52,20 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.wet.rampTo(t * 0.85, 0.05); },
   },
 
-  // ID 4: LFO — rotation controls rate (0.1..8 Hz); links to nearest oscillator or effect
+  // ID 4: Drummer — rotation selects EDM groove preset
   4: {
-    id: 4, name: 'LFO', type: 'controller', subtype: 'lfo', color: '#c98bff', paramLabel: 'Rate',
+    id: 4, name: 'Drummer', type: 'drummer', color: '#ff6b6b', paramLabel: 'Groove',
     getParamT(angle) { return _arcT(angle); },
-    getRateHz(angle) { return _expMap(_arcT(angle), 0.1, 8); }, // 0.1..8 Hz
+    getGrooveIndex(angle) {
+      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
+      const n = dg.DRUM_GROOVES.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
+      const g = dg.DRUM_GROOVES[this.getGrooveIndex(angle)];
+      return g ? g.name : '';
+    },
   },
 
   // ID 5: Tonality — global; rotation selects root pitch class
@@ -69,25 +78,36 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 6: Sequencer — gates the nearest oscillator on a 16-step melodic walk
+  // ID 6: Chords — rotation selects EDM chord progression preset
   6: {
-    id: 6, name: 'Sequencer', type: 'controller', subtype: 'sequencer', color: '#c9a7ff', paramLabel: 'Pattern',
+    id: 6, name: 'Chords', type: 'chords', color: '#ffaa44', paramLabel: 'Prog',
     getParamT(angle) { return _arcT(angle); },
-    getPatternIndex(angle) {
-      const rp = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
-      const n = rp.PATTERNS.length;
+    getProgIndex(angle) {
+      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+      const n = cp.CHORD_PROGRESSIONS.length;
       return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
+      const p = cp.CHORD_PROGRESSIONS[this.getProgIndex(angle)];
+      return p ? p.name : '';
     },
   },
 
-  // ID 7: PitchShift — rotation shifts pitch ±12 semitones
+  // ID 7: Melody — rotation selects EDM melody line preset
   7: {
-    id: 7, name: 'PitchShift', type: 'effect', subtype: 'pitchshift', color: '#ff5d8f',
-    paramLabel: 'Shift',
+    id: 7, name: 'Melody', type: 'lead', color: '#ff44ff', paramLabel: 'Melody',
     getParamT(angle) { return _arcT(angle); },
-    centerValue(t) { return Math.round((t - 0.5) * 24); }, // -12..+12 semitones
-    makeNode() { return new Tone.PitchShift(0); },
-    applyParam(node, t) { node.pitch = Math.round((t - 0.5) * 24); },
+    getMelodyIndex(angle) {
+      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
+      const n = ml.MELODY_LINES.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
+      const m = ml.MELODY_LINES[this.getMelodyIndex(angle)];
+      return m ? m.name : '';
+    },
   },
 
   // ID 8: Tempo — global; rotation sets the Transport BPM (70..160)
@@ -127,22 +147,6 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.bits.value = Math.round(8 - t * 7); },
   },
 
-  // ID 12: Drummer — rotation selects EDM groove preset
-  12: {
-    id: 12, name: 'Drummer', type: 'drummer', color: '#ff6b6b', paramLabel: 'Groove',
-    getParamT(angle) { return _arcT(angle); },
-    getGrooveIndex(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      const n = dg.DRUM_GROOVES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      const g = dg.DRUM_GROOVES[this.getGrooveIndex(angle)];
-      return g ? g.name : '';
-    },
-  },
-
   // ID 16: Bass — rotation selects EDM bassline preset
   16: {
     id: 16, name: 'Bass', type: 'bass', color: '#44ff99', paramLabel: 'Line',
@@ -159,37 +163,6 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 17: Chords — rotation selects EDM chord progression preset
-  17: {
-    id: 17, name: 'Chords', type: 'chords', color: '#ffaa44', paramLabel: 'Prog',
-    getParamT(angle) { return _arcT(angle); },
-    getProgIndex(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      const n = cp.CHORD_PROGRESSIONS.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      const p = cp.CHORD_PROGRESSIONS[this.getProgIndex(angle)];
-      return p ? p.name : '';
-    },
-  },
-
-  // ID 19: Melody — rotation selects EDM melody line preset
-  19: {
-    id: 19, name: 'Melody', type: 'lead', color: '#ff44ff', paramLabel: 'Melody',
-    getParamT(angle) { return _arcT(angle); },
-    getMelodyIndex(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      const n = ml.MELODY_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      const m = ml.MELODY_LINES[this.getMelodyIndex(angle)];
-      return m ? m.name : '';
-    },
-  },
 };
 
 if (typeof window !== 'undefined') window.MODULE_REGISTRY = MODULE_REGISTRY;
