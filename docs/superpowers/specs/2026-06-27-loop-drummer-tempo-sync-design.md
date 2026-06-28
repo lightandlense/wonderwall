@@ -1,4 +1,4 @@
-# Loop-based Drummer with Pre-baked 128 BPM + Global Tempo Puck — Design
+# Loop-based Drummer with Global Tempo Puck — Design
 
 **Date:** 2026-06-27
 **Project:** Reactable Wall
@@ -8,80 +8,63 @@
 
 The Drummer puck (marker ID 4) is a synthesized Tone.js drum machine: `_makeDrums()`
 builds kick/snare/hat synths and `_onStep()` triggers them from `DRUM_GROOVES` patterns.
-We want the drummer to play real drum **WAV loops** instead, and we want every loop
-(drummer + melody) to stay locked in tempo and in key with no per-loop drift.
+We want the drummer to play real drum **WAV loops** instead, and we want the drummer to stay
+in tempo with the melody.
 
 ## Approach (locked)
 
-Pre-bake **all** loops to a single common tempo of **128 BPM** offline (pitch-preserved, so
-key is unchanged). Melody loops are already all in **D# Minor**; drums are keyless — so key is
-already unified and only BPM needs converting. At runtime every loop is natively 128, so they
-are inherently locked and in key. The **Tempo puck (ID 8)** remains the single global tempo
-control: it sets `Transport.bpm`, and all loop pucks (drummer + melody) follow it together via
-the existing `playbackRate` path. At the default 128, every loop plays at `playbackRate = 1.0`.
-
-This deletes the previously considered "melody-drives-tempo" runtime resolver entirely.
+Keep each loop at its **native BPM** in the bank and rely on the existing runtime
+tempo-locking: every loop sampler plays via `Tone.Player` with
+`playbackRate = playbackRateFor(nativeBpm, Transport.bpm) = Transport.bpm / nativeBpm`, so all
+loops conform to one global Transport tempo and therefore stay locked to each other. The
+**Tempo puck (ID 8)** is the global tempo control. The default Transport tempo is **128**
+(unchanged), so by default every loop plays at 128 (loops whose native BPM is 128 play
+untouched; others are stretched to 128). No offline conversion and no tempo resolver are
+needed.
 
 ### Decisions
 
-1. **All loops pre-baked to 128 BPM** (offline, ffmpeg `rubberband`, pitch preserved).
-2. **Drummer puck → loop sampler** cycling all 10 drum loops (`category: 'drums'`).
-3. **Tempo puck stays** as the global tempo control affecting drummer + melody together.
-4. **Remove dead synth-drum code** (not leave it dormant).
+1. **Native BPMs kept in the bank**; runtime `playbackRate` locks every loop to the Transport.
+2. **Fixed 128 default** tempo (no Tempo puck → everything plays at 128).
+3. **Drummer puck → loop sampler** cycling all 10 drum loops (`category: 'drums'`).
+4. **Tempo puck stays** as the global control affecting drummer + melody together.
+5. **Remove dead synth-drum code** (not leave it dormant).
 
 ### Caveat (accepted)
 
-- When the Tempo puck moves **away from 128**, all loops stretch together (still in sync and
-  in key *with each other*), but the synthesized bass/chords/lead band is pitched to the
-  tonality and does not pitch-shift with tempo — so loops can drift in key *vs the synth band*
-  at extreme tempos. Irrelevant when playing loops alone.
-- Converting the few extreme-BPM loops to 128 is a large stretch (98→128 ≈ +31%,
-  155/156→128 ≈ −18%, 150→128, 143→128); rubberband is high quality but transients can smear.
-  Convert, listen, and drop any loop that sounds bad (QA step).
+- Runtime `playbackRate` couples tempo and pitch: a loop not at the current Transport tempo is
+  pitch-shifted. For drums this is a harmless timbre change. For melodies (all D# Minor), a
+  non-128 melody played at 128 drifts out of D# Minor; layering two different-native-BPM
+  melodies can put them in slightly different keys. Accepted for simplicity.
+- Large ratios (e.g. 98→128, 155/156→128) shift pitch noticeably; audition and drop any loop
+  that sounds bad (QA step).
 - The drummer loop, being a fixed audio loop, leaves the cross-modulation "band" system
   (`drummer↔bass/chords/lead`). Those interactions are deleted; `bass↔chords↔lead` remain.
 
-## Offline conversion
-
-A reproducible script (`scripts/convert-loops-128.mjs`, run via `node`) reads each source loop
-and writes a 128-BPM, pitch-preserved copy. Per file: `tempo = 128 / nativeBpm`, e.g.
-
-```
-ffmpeg -y -i "<src>" -af "rubberband=tempo=128/134" "<dst>"
-```
-
-- **Sources (masters, kept):** `loops/Melody/*.wav`, `loops/drummer/*.wav`.
-- **Output (runtime assets):** `loops/_128/Melody/*.wav`, `loops/_128/drummer/*.wav`
-  (same filenames; originals preserved so conversion is re-runnable).
-- The loop bank points at the `loops/_128/...` paths.
-- Native BPMs come from the filenames (all drum + melody files carry their BPM).
-
-| native bpm | loops |
-|---|---|
-| 128 | Ring, Charli, Nation, Melbourne-1, Melbourne-2, Drums(7533390), Golden128, Razor128 |
-| 98 | Trade Off |
-| 122 | Hard Club |
-| 123 | Basic EDM |
-| 155 | Hard EDM (part 2) |
-| 134 | Aquamarine |
-| 140 | Neon Dream, Quest |
-| 143 | Crypto |
-| 150 | Gemstone |
-| 156 | Pyramid |
-
 ## Components / changes
 
-### 1. `scripts/convert-loops-128.mjs` (new)
-Batch-convert all bank loops to 128 into `loops/_128/...` using ffmpeg `rubberband`. Parses
-native BPM from each filename; idempotent (`-y` overwrite). Logs each conversion + the tempo
-factor. Fails loudly if ffmpeg is missing.
+### 1. `src/data/loopBank.js`
+- Add the 8 unused drum WAVs → 10 drum entries (`category: 'drums'`), each with its **native**
+  BPM. File paths stay under `loops/drummer/` and `loops/Melody/` (existing on-disk layout).
+- Melody entries unchanged (8 D# Min entries, native BPMs).
+- `playbackRateFor(loopBpm, curBpm)` unchanged.
 
-### 2. `src/data/loopBank.js`
-- Add the 8 unused drum WAVs → 10 drum entries (`category: 'drums'`).
-- Every entry's `file` points to `loops/_128/...`; every entry's `bpm` is **128**.
-- `playbackRateFor(loopBpm, curBpm)` unchanged (returns `curBpm/128`).
+Drum entries (name, file under `loops/drummer/`, native bpm):
 
-### 3. `src/services/moduleRegistry.js`
+| name | file | bpm |
+|---|---|---|
+| Ring | `Cymatics - Ring Drum Loop - 128 BPM.wav` | 128 |
+| Trade Off | `Cymatics - Trade Off Drum Loop - 98 BPM.wav` | 98 |
+| Hard Club | `looperman-l-2039702-0409953-hard-club-beat-drum - 122 BPM.wav` | 122 |
+| Hard EDM | `looperman-l-2328394-0297437-hard-edm-drums-part-2-sicklunarozza - 155 BPM.wav` | 155 |
+| Charli | `looperman-l-2648144-0386898-charli-xcx-x-shygirl-drums-128bpm.wav` | 128 |
+| Basic EDM | `looperman-l-3065265-0424642-basic-edm-drums - 123 BPM.wav` | 123 |
+| Nation | `looperman-l-6561456-0406445-nation-edm-drum-loop - 128 BPM.wav` | 128 |
+| Melbourne 1 | `looperman-l-7344971-0409722-melbourne-bounce-drum-beats-1-without-noise - 128 BPM.wav` | 128 |
+| Melbourne 2 | `looperman-l-7344971-0409841-melbourne-bounce-drum-beats-2 - 128 BPM.wav` | 128 |
+| Drums | `looperman-l-7533390-0412372-drums - 128 BPM.wav` | 128 |
+
+### 2. `src/services/moduleRegistry.js`
 ID 4 Drummer: change `type: 'drummer'` → `type: 'sampler'`. Replace `getGrooveIndex`/`getName`
 (and the `drumGrooves` require) with drum-category loop selection mirroring the Melody puck:
 
@@ -96,31 +79,30 @@ getLoopIndex(angle) {
 `getName` returns the selected drum entry's name. Keep `id: 4`, `name: 'Drummer'`, color,
 `paramLabel: 'Loop'`.
 
-### 4. `src/services/audioEngine.js`
-- **No tempo resolver.** Keep the existing Tempo-puck path: `_updateModule` tempo branch ramps
-  `Transport.bpm` and the existing `_applyLoopRates()` re-rates all samplers (drummer now
-  included automatically). Default `Transport.bpm = 128` (unchanged).
-- The drummer flows through the existing `sampler` branch of `_addModule` — no new playback
-  code. At 128 its `playbackRate` is 1.0.
+### 3. `src/services/audioEngine.js`
+- **No tempo resolver, no new playback code.** The drummer flows through the existing `sampler`
+  branch of `_addModule`; the existing Tempo-puck path (`_updateModule` tempo branch ramps
+  `Transport.bpm` and calls `_applyLoopRates()`) re-rates all samplers, drummer included.
+  Default `Transport.bpm = 128` (unchanged).
 - **Remove** the now-dead synth-drum path:
   - `_makeDrums()` and any drum-only constants.
-  - `_onStep` drummer block (≈181–203) and the drummer cross-mod references:
-    `_xm_kickFired`/`_xm_snareFired` gather + computation, `fillStepsRemaining`/`_xm_inFill`
-    state, and the `_modDepth('drummer', …)` / `_modDepth(…, 'drummer')` usages in the
-    bass/chords/lead blocks (velocity boost, snare retrigger, kick gating).
-  - `drummer` branch in `_addModule` (≈372–377), the `drums` module-state field, and the
-    `m.drums` disposal in `_removeModule`.
+  - `_onStep` drummer block and the drummer cross-mod references: `_xm_kickFired`/
+    `_xm_snareFired` gather + computation, `fillStepsRemaining`/`_xm_inFill` state, and the
+    `_modDepth('drummer', …)` / `_modDepth(…, 'drummer')` usages in the bass/chords/lead blocks
+    (velocity boost, snare retrigger, kick gating).
+  - `drummer` branch in `_addModule`, the `drums` module-state field, and the `m.drums`
+    disposal in `_removeModule`.
   - `_drumGrooves` import.
 
-### 5. `src/services/modulationMatrix.js`
+### 4. `src/services/modulationMatrix.js`
 Remove `drummer` from `BAND_TYPES` and the 6 `drummer:*` / `*:drummer` entries from
 `VALID_PAIRS` (leaving the 6 `bass`/`chords`/`lead` pairs).
 
-### 6. `src/services/routingGraph.js`
-Remove the redundant `m.def.type === 'drummer'` clause from the generator filter (≈line 26);
-the drummer is now matched by the existing `'sampler'` clause.
+### 5. `src/services/routingGraph.js`
+Remove the redundant `m.def.type === 'drummer'` clause from the generator filter; the drummer
+is now matched by the existing `'sampler'` clause.
 
-### 7. `src/data/drumGrooves.js`
+### 6. `src/data/drumGrooves.js`
 Delete (no longer referenced).
 
 ## Error handling / edge cases
@@ -128,23 +110,23 @@ Delete (no longer referenced).
   inherits it.
 - **Tempo puck present:** sets one global `Transport.bpm`; all loops follow together.
 - **No tempo puck:** everything stays at 128 default.
-- **Missing converted file:** `preloadLoops` already logs a missing-buffer warning per entry;
-  the conversion script must produce all 18 outputs before serving.
 
 ## Testing
-- `loopBank.test.js`: every entry has `bpm === 128`; 10 drum + 8 melody entries with correct
-  categories; `file` paths under `loops/_128/`; `playbackRateFor(128, 128) === 1` and
-  `playbackRateFor(128, 140)` scales correctly.
-- `moduleRegistry` (or `loopBank`) test: ID 4 `getLoopIndex` returns only drum-category
-  indices across the rotation arc; endpoints saturate.
+- `loopBank.test.js`: 10 drum + 8 melody entries with correct categories; drum entries carry
+  their native BPMs; `file` paths under `loops/`; `playbackRateFor(128, 128) === 1`,
+  `playbackRateFor(98, 128) === 128/98`.
+- `moduleRegistry` test: ID 4 is a `sampler`; `getLoopIndex` returns only drum-category indices
+  across the rotation arc; endpoints saturate; stale LFO/Sequencer/PitchShift assertions
+  rewritten to the real current registry.
 - `modulationMatrix.test.js`: update to the reduced pair set (no drummer pairs).
 - `drumGrooves.test.js`: delete.
 - `browserLoad.test.js`: remove `src/data/drumGrooves.js` from the load list.
-- Manual QA: run the conversion script, listen to all 18 converted loops (especially 98, 150,
-  155, 156), drop any that smear badly; verify drummer + melody stay locked and the Tempo puck
-  scrubs both together.
+- Manual QA: serve over http, verify drummer plays + cycles all 10 loops, drummer + melody stay
+  locked, Tempo puck scrubs both together; audition stretched loops (98, 150, 155, 156) and
+  drop any that sound bad.
 
 ## Out of scope
-- Per-loop runtime tempo matching (replaced by pre-baking).
+- Offline pre-baking loops to a common tempo (rejected — Tempo puck + runtime stretch suffices).
+- Pitch-preserving time-stretch (GrainPlayer).
 - Beat-grid/phase alignment of loop start points (loops restart on placement, not bar-quantized).
 - Any change to the synthesized bass/chords/lead band or their remaining modulations.
