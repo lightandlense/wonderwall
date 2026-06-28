@@ -49,8 +49,13 @@ function makeSandbox() {
   class PolySynth extends Node { constructor() { super(); synths.push(this); } triggerAttackRelease() {} }
   class Reverb extends Node { constructor() { super(); this.wet = { value: 0, rampTo() {} }; } }
   class Distortion extends Node { constructor() { super(); this.distortion = 0; } }
+  class PitchShift extends Node { constructor() { super(); this.pitch = 0; } }
+  class Chorus extends Node { constructor() { super(); this.depth = 0; } start() { return this; } }
+  class Tremolo extends Node { constructor() { super(); this.frequency = param(); this.depth = 0; } start() { return this; } }
+  class BitCrusher extends Node { constructor() { super(); this.bits = { value: 8 }; } }
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
     Gain, MembraneSynth, NoiseSynth, MetalSynth, MonoSynth, PolySynth, Reverb, Distortion,
+    PitchShift, Chorus, Tremolo, BitCrusher,
     start: async () => {},
     Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 
@@ -192,7 +197,7 @@ test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
   assert.ok(rate >= 0.1 && rate <= 8, 'lfo rate within design range');
 });
 
-test('Drummer + Tempo pucks: drummer plays through master; groove rotates clean', async () => {
+test('PitchShift (id 7) + Tempo: pitchshift inserts on chain, rotation applies cleanly', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
   const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
@@ -207,21 +212,20 @@ test('Drummer + Tempo pucks: drummer plays through master; groove rotates clean'
   };`, ctx);
   await vm.runInContext('initAudio()', ctx);
 
-  const drum = { id: 7, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const osc  = { id: 0, wx: 200, wy: 400, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const ps   = { id: 7, wx: 400, wy: 350, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const tempo = { id: 8, wx: 600, wy: 600, angle: 3, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([drum, tempo]);
+  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([osc, ps, tempo]);
 
-  assert.ok(ctx.__synthReachesDest(), 'drummer should reach the master/destination');
-  assert.strictEqual(vm.runInContext('typeof getModuleLevel(7)', ctx), 'number');
-  // Rotate the drummer to a different groove — no throw.
+  assert.ok(ctx.__synthReachesDest(), 'oscillator + pitchshift should reach master');
+  assert.strictEqual(vm.runInContext('typeof getModuleLevel(0)', ctx), 'number');
   assert.doesNotThrow(() => {
-    const drumRot = { id: 7, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: drum.screenCorners };
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drumRot, tempo]);
+    const psRot = { id: 7, wx: 400, wy: 350, angle: Math.PI / 4, screenCorners: ps.screenCorners };
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, psRot, tempo]);
   });
-  assert.doesNotThrow(() => { for (let i = 0; i < 4; i++) ctx.onMarkersDetected([drum]); });
 });
 
-test('Bass + Chords pucks play through master; rotate clean; tonality optional', async () => {
+test('Oscillator + Sequencer + Tonality: sequencer gates osc; tonality quantizes pitch', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
   const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
@@ -236,17 +240,15 @@ test('Bass + Chords pucks play through master; rotate clean; tonality optional',
   };`, ctx);
   await vm.runInContext('initAudio()', ctx);
 
-  const bass = { id: 0, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  const chords = { id: 6, wx: 300, wy: 300, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const osc = { id: 0, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
+  const seq = { id: 6, wx: 110, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const ton = { id: 5, wx: 900, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
 
-  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([bass, chords, ton]);
-  assert.ok(ctx.__synthReachesDest(), 'bass/chords should reach master');
+  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([osc, seq, ton]);
+  assert.ok(ctx.__synthReachesDest(), 'oscillator/sequencer should reach master');
   assert.strictEqual(vm.runInContext('typeof getModuleLevel(0)', ctx), 'number');
-  assert.strictEqual(vm.runInContext('typeof getModuleLevel(6)', ctx), 'number');
   assert.doesNotThrow(() => {
-    const bRot = { id: 0, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: bass.screenCorners };
-    const cRot = { id: 6, wx: 300, wy: 300, angle: Math.PI / 4, screenCorners: chords.screenCorners };
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([bRot, cRot]);
+    const oscRot = { id: 0, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: osc.screenCorners };
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([oscRot, seq, ton]);
   });
 });

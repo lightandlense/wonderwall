@@ -15,20 +15,11 @@ function _arcT(angle) {
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
 const MODULE_REGISTRY = {
-  // ID 0: Bass — self-playing bassline generator; rotation picks the line, key from Tonality.
-  // (Replaced the Oscillator; oscillator audio code left dormant.)
+  // ID 0: Oscillator — rotation controls pitch (C3..C6)
   0: {
-    id: 0, name: 'Bass', type: 'bass', color: '#4d7cff', paramLabel: 'Line',
+    id: 0, name: 'Oscillator', type: 'oscillator', color: '#4d7cff', paramLabel: 'Pitch',
     getParamT(angle) { return _arcT(angle); },
-    getLineIndex(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      const n = bl.BASS_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      return bl.BASS_LINES[this.getLineIndex(angle)].name;
-    },
+    getFreq(angle) { return _expMap(_arcT(angle), 130.81, 1046.5); }, // C3..C6
   },
 
   // ID 1: Filter — rotation controls low-pass cutoff
@@ -61,20 +52,11 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.wet.rampTo(t * 0.85, 0.05); },
   },
 
-  // ID 4: Lead — self-playing melody generator; rotation picks the line, key from Tonality.
-  // (Replaced the LFO; LFO audio code left dormant.)
+  // ID 4: LFO — rotation controls rate (0.1..8 Hz); links to nearest oscillator or effect
   4: {
-    id: 4, name: 'Lead', type: 'lead', color: '#c98bff', paramLabel: 'Melody',
+    id: 4, name: 'LFO', type: 'controller', subtype: 'lfo', color: '#c98bff', paramLabel: 'Rate',
     getParamT(angle) { return _arcT(angle); },
-    getMelodyIndex(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      const n = ml.MELODY_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      return ml.MELODY_LINES[this.getMelodyIndex(angle)].name;
-    },
+    getRateHz(angle) { return _expMap(_arcT(angle), 0.1, 8); }, // 0.1..8 Hz
   },
 
   // ID 5: Tonality — global; rotation selects root pitch class
@@ -87,36 +69,25 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 6: Chords — self-playing chord-pad generator; rotation picks the progression, key from Tonality.
-  // (Replaced the Sequencer; sequencer audio code left dormant.)
+  // ID 6: Sequencer — gates the nearest oscillator on a 16-step melodic walk
   6: {
-    id: 6, name: 'Chords', type: 'chords', color: '#c9a7ff', paramLabel: 'Chords',
+    id: 6, name: 'Sequencer', type: 'controller', subtype: 'sequencer', color: '#c9a7ff', paramLabel: 'Pattern',
     getParamT(angle) { return _arcT(angle); },
-    getProgIndex(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      const n = cp.CHORD_PROGRESSIONS.length;
+    getPatternIndex(angle) {
+      const rp = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
+      const n = rp.PATTERNS.length;
       return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      return cp.CHORD_PROGRESSIONS[this.getProgIndex(angle)].name;
     },
   },
 
-  // ID 7: Drummer — drum-machine generator; rotation selects a preset groove.
-  // (Replaced the Loop/sampler puck; loopBank.js + assets/loops kept for future reuse.)
+  // ID 7: PitchShift — rotation shifts pitch ±12 semitones
   7: {
-    id: 7, name: 'Drummer', type: 'drummer', color: '#ff5d8f', paramLabel: 'Groove',
+    id: 7, name: 'PitchShift', type: 'effect', subtype: 'pitchshift', color: '#ff5d8f',
+    paramLabel: 'Shift',
     getParamT(angle) { return _arcT(angle); },
-    getGrooveIndex(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      const n = dg.DRUM_GROOVES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      return dg.DRUM_GROOVES[this.getGrooveIndex(angle)].name;
-    },
+    centerValue(t) { return Math.round((t - 0.5) * 24); }, // -12..+12 semitones
+    makeNode() { return new Tone.PitchShift(0); },
+    applyParam(node, t) { node.pitch = Math.round((t - 0.5) * 24); },
   },
 
   // ID 8: Tempo — global; rotation sets the Transport BPM (70..160)
@@ -134,16 +105,6 @@ const MODULE_REGISTRY = {
     centerValue(t) { return t * 0.9; },
     makeNode() { return new Tone.Distortion({ distortion: 0, wet: 1 }); },
     applyParam(node, t) { node.distortion = t * 0.9; },
-  },
-
-  // ID 12: Chorus — rotation controls depth (thin to thick/detuned)
-  12: {
-    id: 12, name: 'Chorus', type: 'effect', subtype: 'chorus', color: '#44ff88',
-    paramLabel: 'Depth',
-    getParamT(angle) { return _arcT(angle); },
-    centerValue(t) { return t * 0.9; },
-    makeNode() { const c = new Tone.Chorus(4, 2.5, 0); c.start(); return c; },
-    applyParam(node, t) { node.depth = t * 0.9; },
   },
 
   // ID 14: Tremolo — rotation controls rate (slow throb to rapid stutter)

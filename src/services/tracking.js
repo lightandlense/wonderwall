@@ -183,5 +183,10 @@ function arLoop() {
 
 window.toggleWebcam = toggleWebcam;
 
-// Auto-start
+// Hides/shows the video preview without stopping the webcam stream.
+window.toggleWebcamPreview = function() {
+  arVideo.style.display = arVideo.style.display === 'none' ? 'block' : 'none';
+};
+
+// Auto-start (webcam always on)
 toggleWebcam();

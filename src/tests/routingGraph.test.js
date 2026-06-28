@@ -127,17 +127,8 @@ test('buildRawPlan: an LFO links to a nearby sampler (loop)', () => {
   assert.strictEqual(link.targetId, 7);
 });
 
-const bassMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'bass' } });
-const chordsMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'chords' } });
-test('buildRawPlan: bass and chords are generators (chain to master)', () => {
-  const pb = routingGraph.buildRawPlan([bassMod(0, 480, 480)], VP, new Set());
-  assert.deepStrictEqual(pb.chains[0].nodeIds, [0, 'master']);
-  const pc = routingGraph.buildRawPlan([chordsMod(6, 480, 480)], VP, new Set());
-  assert.deepStrictEqual(pc.chains[0].nodeIds, [6, 'master']);
-});
-
-const leadMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'lead' } });
-test('buildRawPlan: lead is a generator (chain to master)', () => {
-  const p = routingGraph.buildRawPlan([leadMod(4, 480, 480)], VP, new Set());
-  assert.deepStrictEqual(p.chains[0].nodeIds, [4, 'master']);
+test('buildRawPlan: oscillator is the sole generator type (chain to master)', () => {
+  const oscMod = (id, x, y) => ({ id, wx: x, wy: y, angle: 0, def: { type: 'oscillator' } });
+  const p = routingGraph.buildRawPlan([oscMod(0, 480, 480)], VP, new Set());
+  assert.deepStrictEqual(p.chains[0].nodeIds, [0, 'master']);
 });
