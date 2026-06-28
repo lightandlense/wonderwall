@@ -83,7 +83,8 @@ async function preloadLoops() {
   }
   for (const entry of _loopBank.LOOP_BANK) {
     try {
-      const buf = await Tone.ToneAudioBuffer.fromUrl(entry.file);
+      const encodedUrl = entry.file.split('/').map(encodeURIComponent).join('/');
+      const buf = await Tone.ToneAudioBuffer.fromUrl(encodedUrl);
       LOOP_BUFFERS[entry.file] = buf;
       let data = null;
       try { data = (typeof buf.toArray === 'function') ? buf.toArray(0) : null; }
@@ -95,6 +96,10 @@ async function preloadLoops() {
     }
   }
   console.log('[audio] loops loaded:', Object.keys(LOOP_BUFFERS).length, '/', _loopBank.LOOP_BANK.length);
+  _loopBank.LOOP_BANK.forEach(e => {
+    if (!LOOP_BUFFERS[e.file]) console.warn('[audio] MISSING buffer:', e.file);
+    else console.log('[audio] OK:', e.file, 'loaded=', LOOP_BUFFERS[e.file].loaded);
+  });
 }
 
 // Fired once per 16th note by the Transport loop: each active sequencer fires
@@ -346,15 +351,23 @@ function _addModule(id, marker) {
     loopIdx = def.getLoopIndex(smoother.get());
     const entry = _loopBank.LOOP_BANK[loopIdx];
     const buf = LOOP_BUFFERS[entry.file];
+    console.log('[sampler] add id', id, 'loopIdx', loopIdx, 'file', entry && entry.file, 'buf?', !!buf, 'bufLoaded?', buf && buf.loaded, 'master?', !!master);
     if (buf) {
-      const player = new Tone.Player({ url: buf, loop: true });
-      player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
-      player.sync().start('@1m');   // launch on the next bar, locked to the Transport
-      node = player;
-      meter = new Tone.Meter({ smoothing: 0.8 });
-      player.connect(meter);
+      try {
+        const player = new Tone.Player(buf);
+        player.loop = true;
+        player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+        player.connect(master);
+        player.start();
+        node = player;
+        meter = new Tone.Meter({ smoothing: 0.8 });
+        player.connect(meter);
+        console.log('[sampler] player started, state=', player.state, 'loaded=', player.buffer && player.buffer.loaded);
+      } catch (e) {
+        console.error('[sampler] player creation/start failed:', e);
+      }
     } else {
-      console.warn('[audio] Loop puck: no buffer for', entry.file, '— serve over http (npm start) so loops can load.');
+      console.warn('[audio] Loop puck: no buffer for', entry && entry.file, '— serve over http (npm start) so loops can load.');
     }
   } else if (def.type === 'drummer') {
     presetIdx = def.getGrooveIndex(smoother.get());
@@ -632,11 +645,11 @@ function applyRoutingPlan(plan) {
       const b = nodeOf(chain.nodeIds[i + 1]);
       if (a && b) { try { a.connect(b); } catch (_) {} }
     }
-    // Reconnect effect meter taps (n.disconnect() removes outgoing connections including the tap)
+    // Reconnect meter taps for all modules (n.disconnect() removes outgoing connections including the tap)
     chain.nodeIds.forEach(id => {
       if (id === 'master') return;
       const m = activeModules[id];
-      if (m && m.meter && m.def.type === 'effect') { try { nodeOf(id).connect(m.meter); } catch (_) {} }
+      if (m && m.meter) { try { nodeOf(id).connect(m.meter); } catch (_) {} }
     });
     console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
   });

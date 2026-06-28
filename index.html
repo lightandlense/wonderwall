@@ -203,8 +203,8 @@
 
         // B — toggle background between black and white
         case 'b': {
-          const isBlack = document.body.style.background !== '#fff';
-          document.body.style.background = isBlack ? '#fff' : '#000';
+          window._bgWhite = !window._bgWhite;
+          document.body.style.background = window._bgWhite ? '#fff' : '#000';
           break;
         }
       }
