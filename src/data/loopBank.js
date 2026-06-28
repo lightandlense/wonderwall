@@ -25,6 +25,12 @@ const LOOP_BANK = [
   { name: 'Pyramid',     file: 'loops/_128/Melody/Cymatics - Pyramid - 156 BPM Ds Min.wav',    bpm: 128, category: 'melody' },
   { name: 'Quest',       file: 'loops/_128/Melody/Cymatics - Quest - 140 BPM Ds Min.wav',      bpm: 128, category: 'melody' },
   { name: 'Razor',       file: 'loops/_128/Melody/Cymatics - Razor - 128 BPM Ds Min.wav',      bpm: 128, category: 'melody' },
+  // --- Chord loops (category 'chords', all D# Minor) ---
+  { name: 'Phrog',       file: 'loops/_128/Chords/looperman-l-2212484-0214543-phrog-progressive-house-chords- 128 BPM, D#m.wav', bpm: 128, category: 'chords' },
+  { name: 'Short Synth', file: 'loops/_128/Chords/looperman-l-5903669-0385270-short-synth-loop- 95 BPM D#m.wav',                 bpm: 128, category: 'chords' },
+  { name: 'Psy Chorus',  file: 'loops/_128/Chords/looperman-l-6413071-0415019-je-8086-psy-chorus- 138 BPM D#m.wav',             bpm: 128, category: 'chords' },
+  { name: 'Reese',       file: 'loops/_128/Chords/looperman-l-7722845-0426217-reese-with-big-r - 134 BPM D#m.wav',              bpm: 128, category: 'chords' },
+  { name: 'Epic Synth',  file: 'loops/_128/Chords/looperman-l-7722845-0426218-epic-synth - 134 BPM D#m.wav',                    bpm: 128, category: 'chords' },
 ];
 
 function playbackRateFor(loopBpm, curBpm) {

@@ -9,15 +9,15 @@ test('LOOP_BANK: every entry well-formed (pre-baked 128, under loops/_128/)', ()
     assert.ok(e.file.startsWith('loops/_128/'), `file path: ${e.file}`);
     assert.ok(e.file.toLowerCase().endsWith('.wav'), `wav: ${e.file}`);
     assert.strictEqual(e.bpm, 128, `bpm 128: ${e.name}`);
-    assert.ok(e.category === 'drums' || e.category === 'melody', `category: ${e.category}`);
+    assert.ok(['drums', 'melody', 'chords'].includes(e.category), `category: ${e.category}`);
   }
 });
 
-test('LOOP_BANK: 10 drum loops and 8 melody loops', () => {
-  const drums = loopBank.LOOP_BANK.filter(e => e.category === 'drums');
-  const melody = loopBank.LOOP_BANK.filter(e => e.category === 'melody');
-  assert.strictEqual(drums.length, 10, 'drum count');
-  assert.strictEqual(melody.length, 8, 'melody count');
+test('LOOP_BANK: 10 drum, 8 melody, 5 chord loops', () => {
+  const by = (c) => loopBank.LOOP_BANK.filter(e => e.category === c).length;
+  assert.strictEqual(by('drums'), 10, 'drum count');
+  assert.strictEqual(by('melody'), 8, 'melody count');
+  assert.strictEqual(by('chords'), 5, 'chord count');
 });
 
 test('playbackRateFor: ratio of current to loop bpm, guarded', () => {
