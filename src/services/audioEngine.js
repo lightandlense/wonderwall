@@ -21,7 +21,7 @@ const _bassLines = (typeof require === 'function') ? require('../data/bassLines.
 const _melodyLines = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
 const BASS_BASE_FREQ = 65.41;    // C2 anchor for the bass register
 const LEAD_BASE_FREQ = 523.25;   // C5 anchor for the lead (sits above bass + pad)
-const DEFAULT_ROOT = 0;          // C, when no Tonality puck is present
+const DEFAULT_ROOT = 3;          // D#, matches the D# Minor loops (when no Tonality puck is present)
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
 
@@ -243,9 +243,11 @@ function _addModule(id, marker) {
         player.loop = true;
         player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
         player.connect(master);
-        // Phase-sync: launch on the next bar so all loops align to the global grid
-        // (same mechanism as _swapLoop). Immediate start() would free-run off-grid.
-        Tone.Transport.scheduleOnce((t) => { try { player.start(t); } catch (_) {} }, '@1m');
+        // Phase-sync (instant): start now but offset into the loop to the current grid
+        // position, so it locks to the global bar grid without waiting for the next bar.
+        const loopDur = buf.duration / player.playbackRate;        // real seconds per loop cycle
+        const phase = (((Tone.Transport.seconds || 0) % loopDur) + loopDur) % loopDur;
+        player.start(undefined, phase * player.playbackRate);      // offset is in buffer seconds
         node = player;
         meter = new Tone.Meter({ smoothing: 0.8 });
         player.connect(meter);
@@ -353,23 +355,25 @@ function _updateModule(id, marker) {
   }
 }
 
-// Swap a loop puck's buffer on the next bar (keeps node identity so routing stays wired).
+// Swap a loop puck's buffer instantly, offset to the current grid position so the new
+// loop stays phase-locked (keeps node identity so routing stays wired).
 function _swapLoop(id, idx) {
   const m = activeModules[id];
   if (!m || !m.node) return;
   const entry = _loopBank.LOOP_BANK[idx];
   const buf = entry && LOOP_BUFFERS[entry.file];
   if (!buf) return;
-  Tone.Transport.scheduleOnce((time) => {
-    try {
-      m.node.buffer = buf;
-      m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
-      // A looping Player keeps playing its OLD buffer until the source is recreated;
-      // restart() makes a fresh source so the new loop actually plays.
-      m.node.restart(time);
-      console.log('[audio] loop ->', entry.name);
-    } catch (_) {}
-  }, '@1m');
+  try {
+    m.node.buffer = buf;
+    m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
+    // A looping Player keeps playing its OLD buffer until the source is recreated;
+    // restart() makes a fresh source so the new loop actually plays — offset to the
+    // grid phase so the swapped loop comes in immediately, still aligned.
+    const loopDur = buf.duration / m.node.playbackRate;
+    const phase = (((Tone.Transport.seconds || 0) % loopDur) + loopDur) % loopDur;
+    m.node.restart(undefined, phase * m.node.playbackRate);
+    console.log('[audio] loop ->', entry.name);
+  } catch (_) {}
 }
 
 // Re-rate every active loop when the tempo changes (keeps loops locked to the new BPM).
