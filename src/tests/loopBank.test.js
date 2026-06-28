@@ -2,13 +2,13 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const loopBank = require('../data/loopBank.js');
 
-test('LOOP_BANK: every entry well-formed (native bpm, under loops/)', () => {
+test('LOOP_BANK: every entry well-formed (pre-baked 128, under loops/_128/)', () => {
   assert.ok(Array.isArray(loopBank.LOOP_BANK) && loopBank.LOOP_BANK.length >= 1);
   for (const e of loopBank.LOOP_BANK) {
     assert.ok(typeof e.name === 'string' && e.name.length > 0, 'name');
-    assert.ok(e.file.startsWith('loops/'), `file path: ${e.file}`);
+    assert.ok(e.file.startsWith('loops/_128/'), `file path: ${e.file}`);
     assert.ok(e.file.toLowerCase().endsWith('.wav'), `wav: ${e.file}`);
-    assert.ok(typeof e.bpm === 'number' && e.bpm > 0, `bpm > 0: ${e.name}`);
+    assert.strictEqual(e.bpm, 128, `bpm 128: ${e.name}`);
     assert.ok(e.category === 'drums' || e.category === 'melody', `category: ${e.category}`);
   }
 });
