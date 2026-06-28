@@ -243,7 +243,9 @@ function _addModule(id, marker) {
         player.loop = true;
         player.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
         player.connect(master);
-        player.start();
+        // Phase-sync: launch on the next bar so all loops align to the global grid
+        // (same mechanism as _swapLoop). Immediate start() would free-run off-grid.
+        Tone.Transport.scheduleOnce((t) => { try { player.start(t); } catch (_) {} }, '@1m');
         node = player;
         meter = new Tone.Meter({ smoothing: 0.8 });
         player.connect(meter);
