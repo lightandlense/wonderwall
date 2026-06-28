@@ -24,6 +24,10 @@ const MIME = {
   '.map': 'application/json',
 };
 
+// App code must never be served stale — browsers heuristically cache .js, which has
+// served old logic during development. Large audio assets may still cache normally.
+const NO_CACHE = new Set(['.html', '.js', '.css', '.json', '.map']);
+
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (urlPath === '/') urlPath = '/index.html';
@@ -38,8 +42,11 @@ const server = http.createServer((req, res) => {
       res.end('Not found: ' + urlPath);
       return;
     }
-    const type = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': type });
+    const ext = path.extname(filePath).toLowerCase();
+    const type = MIME[ext] || 'application/octet-stream';
+    const headers = { 'Content-Type': type };
+    if (NO_CACHE.has(ext)) headers['Cache-Control'] = 'no-store';
+    res.writeHead(200, headers);
     res.end(data);
   });
 });
