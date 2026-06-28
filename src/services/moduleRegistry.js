@@ -14,6 +14,19 @@ function _arcT(angle) {
 // Exponential map helper for [0,1] -> [lo,hi].
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
+// Bit-crush WaveShaper curve: quantize [-1,1] to 2^bits levels. A plain WaveShaper
+// (native node) replaces Tone v15's AudioWorklet BitCrusher, which didn't process audio.
+function _crushCurve(bits) {
+  const steps = Math.pow(2, Math.max(1, bits));
+  const n = 1024;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;                                   // -1..1
+    curve[i] = Math.round(((x + 1) / 2) * (steps - 1)) / (steps - 1) * 2 - 1;
+  }
+  return curve;
+}
+
 const MODULE_REGISTRY = {
   // ID 0: Oscillator — rotation controls pitch (C3..C6)
   0: {
@@ -148,8 +161,8 @@ const MODULE_REGISTRY = {
     paramLabel: 'Crush',
     getParamT(angle) { return _arcT(angle); },
     centerValue(t) { return Math.round(8 - t * 7); }, // 8..1 bits
-    makeNode() { return new Tone.BitCrusher(8); },
-    applyParam(node, t) { node.bits.value = Math.round(8 - t * 7); },
+    makeNode() { const ws = new Tone.WaveShaper(); ws.curve = _crushCurve(this.centerValue(0)); return ws; },
+    applyParam(node, t) { node.curve = _crushCurve(this.centerValue(t)); },
   },
 
   // ID 20: Loop — rotation selects a loop from the loop bank
