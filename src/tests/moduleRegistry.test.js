@@ -24,6 +24,8 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[8].subtype, 'tempo');
   assert.strictEqual(MODULE_REGISTRY[9].subtype, 'distortion');
   assert.strictEqual(MODULE_REGISTRY[16].type, 'sampler');  // Bass is now a loop sampler
+  assert.strictEqual(MODULE_REGISTRY[12].type, 'global');      // Loop Bank switcher
+  assert.strictEqual(MODULE_REGISTRY[12].subtype, 'loopgroup');
   assert.strictEqual(MODULE_REGISTRY[20].type, 'sampler');  // Loop
 });
 
@@ -50,6 +52,7 @@ test('Oscillator (id 0): getFreq maps rotation to C3..C6 range', () => {
 });
 
 test('Drummer (id 4): is a sampler that only selects drum-category loops', () => {
+  require('../data/loopBank.js').setActiveGroup('og');
   const drum = MODULE_REGISTRY[4];
   const lb = require('../data/loopBank.js');
   assert.strictEqual(drum.type, 'sampler');
@@ -65,6 +68,7 @@ test('Drummer (id 4): is a sampler that only selects drum-category loops', () =>
 });
 
 test('Chords (id 6): is a sampler that only selects chord-category loops', () => {
+  require('../data/loopBank.js').setActiveGroup('og');
   const ch = MODULE_REGISTRY[6];
   const lb = require('../data/loopBank.js');
   assert.strictEqual(ch.type, 'sampler');
@@ -78,6 +82,7 @@ test('Chords (id 6): is a sampler that only selects chord-category loops', () =>
 });
 
 test('Bass (id 16): is a sampler that only selects bass-category loops', () => {
+  require('../data/loopBank.js').setActiveGroup('og');
   const bass = MODULE_REGISTRY[16];
   const lb = require('../data/loopBank.js');
   assert.strictEqual(bass.type, 'sampler');
@@ -96,4 +101,26 @@ test('Tempo (id 8): rotation maps to 70..160 BPM', () => {
   assert.strictEqual(tempo.subtype, 'tempo');
   assert.strictEqual(tempo.getBpm(3 * Math.PI / 2), 70);
   assert.strictEqual(tempo.getBpm(Math.PI / 4), 160);
+});
+
+test('Loop Bank (id 12): rotation maps arc to og / futurebass', () => {
+  const lbp = MODULE_REGISTRY[12];
+  assert.strictEqual(lbp.type, 'global');
+  assert.strictEqual(lbp.getGroup(3 * Math.PI / 2), 'og');        // t=0 -> first group
+  assert.strictEqual(lbp.getGroup(Math.PI / 4), 'futurebass');    // t=1 -> last group
+  assert.ok(typeof lbp.getName(0) === 'string' && lbp.getName(0).length > 0);
+});
+
+test('Samplers select within the active group only', () => {
+  const lb = require('../data/loopBank.js');
+  const bass = MODULE_REGISTRY[16];
+  lb.setActiveGroup('og');
+  let idx = bass.getLoopIndex(0);
+  assert.strictEqual(lb.LOOP_BANK[idx].group, 'og');
+  assert.strictEqual(lb.LOOP_BANK[idx].category, 'bass');
+  lb.setActiveGroup('futurebass');
+  idx = bass.getLoopIndex(0);
+  assert.strictEqual(lb.LOOP_BANK[idx].group, 'futurebass');
+  assert.strictEqual(lb.LOOP_BANK[idx].category, 'bass');
+  lb.setActiveGroup('og'); // restore
 });

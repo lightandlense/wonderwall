@@ -27,6 +27,22 @@ function _crushCurve(bits) {
   return curve;
 }
 
+// Shared loop-selection for sampler pucks: pick within a category AND the active group.
+function _lb() { return (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank; }
+function _samplerLoopIndex(category, angle) {
+  const lb = _lb();
+  const indices = lb.LOOP_BANK.map((e, i) => i)
+    .filter(i => lb.LOOP_BANK[i].category === category && lb.LOOP_BANK[i].group === lb.activeGroup);
+  if (indices.length === 0) return -1;
+  const t = _arcT(angle);
+  return indices[Math.max(0, Math.min(indices.length - 1, Math.floor(t * indices.length)))];
+}
+function _samplerName(category, angle) {
+  const lb = _lb();
+  const i = _samplerLoopIndex(category, angle);
+  return (i >= 0 && lb.LOOP_BANK[i]) ? lb.LOOP_BANK[i].name : '';
+}
+
 const MODULE_REGISTRY = {
   // ID 0: Oscillator — rotation controls pitch (C3..C6)
   0: {
@@ -69,17 +85,8 @@ const MODULE_REGISTRY = {
   4: {
     id: 4, name: 'Drummer', type: 'sampler', color: '#ff6b6b', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'drums');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('drums', angle); },
+    getName(angle) { return _samplerName('drums', angle); },
   },
 
   // ID 5: Volume — fades the nearest sound puck. 0 = silent, center = unity (0 dB), full = +6 dB.
@@ -96,36 +103,16 @@ const MODULE_REGISTRY = {
   6: {
     id: 6, name: 'Chords', type: 'sampler', color: '#ffaa44', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'chords');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('chords', angle); },
+    getName(angle) { return _samplerName('chords', angle); },
   },
 
   // ID 7: Melody — rotation selects a Cymatics melody loop
   7: {
     id: 7, name: 'Melody', type: 'sampler', color: '#ff44ff', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'melody');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const melody = lb.LOOP_BANK.filter(e => e.category === 'melody');
-      const n = melody.length;
-      const e = melody[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('melody', angle); },
+    getName(angle) { return _samplerName('melody', angle); },
   },
 
   // ID 8: Tempo — global; rotation sets the Transport BPM (70..160)
@@ -143,6 +130,21 @@ const MODULE_REGISTRY = {
     centerValue(t) { return t * 0.9; },
     makeNode() { return new Tone.Distortion({ distortion: 0, wet: 1 }); },
     applyParam(node, t) { node.distortion = t * 0.9; },
+  },
+
+  // ID 12: Loop Bank — global; rotation selects the active loop group (OG / Futurebass)
+  12: {
+    id: 12, name: 'Loop Bank', type: 'global', subtype: 'loopgroup', color: '#aa88ff', paramLabel: 'Bank',
+    getParamT(angle) { return _arcT(angle); },
+    getGroup(angle) {
+      const lb = _lb();
+      const n = lb.GROUPS.length;
+      return lb.GROUPS[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
+    },
+    getName(angle) {
+      const lb = _lb();
+      return lb.GROUP_LABELS[this.getGroup(angle)] || this.getGroup(angle);
+    },
   },
 
   // ID 14: Tremolo — rotation controls rate (slow throb to rapid stutter)
@@ -185,17 +187,8 @@ const MODULE_REGISTRY = {
   16: {
     id: 16, name: 'Bass', type: 'sampler', color: '#44ff99', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'bass');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('bass', angle); },
+    getName(angle) { return _samplerName('bass', angle); },
   },
 
 };
