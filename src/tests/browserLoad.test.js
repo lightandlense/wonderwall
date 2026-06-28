@@ -53,9 +53,10 @@ function makeSandbox() {
   class Chorus extends Node { constructor() { super(); this.depth = 0; } start() { return this; } }
   class Tremolo extends Node { constructor() { super(); this.frequency = param(); this.depth = 0; } start() { return this; } }
   class BitCrusher extends Node { constructor() { super(); this.bits = { value: 8 }; } }
+  class WaveShaper extends Node { constructor() { super(); this.curve = null; this.oversample = 'none'; } }
   sandbox.Tone = { Synth, Volume, Filter, FeedbackDelay, LFO, Loop, Meter, Player, ToneAudioBuffer,
     Gain, MembraneSynth, NoiseSynth, MetalSynth, MonoSynth, PolySynth, Reverb, Distortion,
-    PitchShift, Chorus, Tremolo, BitCrusher,
+    PitchShift, Chorus, Tremolo, BitCrusher, WaveShaper,
     start: async () => {},
     Transport: { bpm: { value: 110, rampTo() {} }, start() {}, stop() {}, scheduleOnce(cb) { cb(); } } };
 
