@@ -65,7 +65,7 @@ async function initAudio() {
   await Tone.start();
   await preloadLoops();                         // decode loop buffers + peak envelopes
   master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
-  Tone.Transport.bpm.value = 110;               // BPM
+  Tone.Transport.bpm.value = 128;               // BPM — EDM default
   _step = 0;
   _stepLoop = new Tone.Loop((time) => { _onStep(time); }, '16n').start(0);
   Tone.Transport.start();

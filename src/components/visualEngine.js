@@ -141,9 +141,9 @@ const visualEngine = (() => {
       visCtx.fillText(def.name.toUpperCase(), wx, wy - ringR - 14);
       visCtx.restore();
 
-      // Param value below the ring — loop name for samplers, percentage otherwise
+      // Param value below the ring — named preset if available, percentage otherwise
       const paramPct = Math.round(paramT * 100);
-      const belowLabel = (def.type === 'sampler' && def.getName)
+      const belowLabel = def.getName
         ? `${def.paramLabel}: ${def.getName(angle)}`
         : `${def.paramLabel}: ${paramPct}%`;
       visCtx.save();

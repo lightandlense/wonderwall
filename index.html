@@ -45,17 +45,17 @@
 </head>
 <body>
 
-  <div id="key-hints">M: markers &nbsp;|&nbsp; [ ]: size &nbsp;|&nbsp; C: calibrate &nbsp;|&nbsp; W: webcam &nbsp;|&nbsp; F: fullscreen &nbsp;|&nbsp; O: overlay</div>
+  <div id="key-hints">M: markers &nbsp;|&nbsp; [ ]: size &nbsp;|&nbsp; C: calibrate &nbsp;|&nbsp; W: webcam &nbsp;|&nbsp; F: fullscreen &nbsp;|&nbsp; O: overlay &nbsp;|&nbsp; B: bg</div>
   <canvas id="debug-canvas"></canvas>
   <canvas id="vis-canvas"></canvas>
   <canvas id="calib-canvas"></canvas>
 
   <div id="start-banner">
     <h1>REACTABLE WALL</h1>
-    <p>Place ID 0 (Oscillator) anywhere — it flows to the glowing center and sounds.<br>
-       Add ID 1 (Filter) / ID 2 (Delay) near the path to the center to shape it.<br>
-       ID 6 (Sequencer) near an oscillator adds rhythm; ID 5 (Tonality) makes it melodic.<br>
-       ID 4 (LFO) modulates the nearest puck; ID 3 (Volume) sets master level.</p>
+    <p>ID 0 (Oscillator) flows to the center and sounds. ID 1 Filter / ID 2 Delay / ID 3 Reverb shape it.<br>
+       ID 12 (Drummer) · ID 16 (Bass) · ID 17 (Chords) · ID 19 (Melody) — rotate to pick EDM preset.<br>
+       ID 6 (Sequencer) gates an oscillator; ID 5 (Tonality) sets the key; ID 8 (Tempo) sets BPM.<br>
+       ID 4 (LFO) modulates the nearest puck. Press <strong>B</strong> to toggle black/white background.</p>
     <button id="start-btn">TAP TO START</button>
   </div>
 
@@ -198,6 +198,13 @@
           window.showOverlay = window.showOverlay === false ? true : false;
           const hints = document.getElementById('key-hints');
           if (hints) hints.style.display = window.showOverlay === false ? 'none' : 'block';
+          break;
+        }
+
+        // B — toggle background between black and white
+        case 'b': {
+          const isBlack = document.body.style.background !== '#fff';
+          document.body.style.background = isBlack ? '#fff' : '#000';
           break;
         }
       }
