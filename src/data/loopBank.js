@@ -2,8 +2,10 @@
 // Curated loop bank. Pure data + rate math.
 // Every loop is pre-baked to 128 BPM (pitch preserved) by scripts/convert-loops-128.mjs
 // into loops/_128/; the `bpm` field is 128 for all, and playbackRate = Transport.bpm / 128
-// lets the Tempo puck globally re-rate every loop together. Melody loops are all D# Minor;
-// drums are keyless. Source masters remain under loops/Melody and loops/drummer.
+// lets the Tempo puck globally re-rate every loop together. Melody, chord, and bass loops
+// are all D# Minor (off-key sources are pitch-shifted to a D# root during the bake);
+// drums are keyless. Source masters remain under loops/Melody, loops/drummer,
+// loops/Chords, and loops/bass.
 const LOOP_BANK = [
   // --- Drummer loops (category 'drums') ---
   { name: 'Ring',        file: 'loops/_128/drummer/Cymatics - Ring Drum Loop - 128 BPM.wav',                                         bpm: 128, category: 'drums' },
@@ -35,6 +37,15 @@ const LOOP_BANK = [
   // Pitch-shifted to D# root (sources were B / B-flat major; see scripts note). Bbmaj stays major-flavored.
   { name: 'Paragon',         file: 'loops/_128/Chords/looperman-l-4055719-0426572-paragon-140bpm-b.wav',                                                  bpm: 128, category: 'chords' },
   { name: 'Broken Soul',     file: 'loops/_128/Chords/looperman-l-4055719-0427155-broken-soul-151bpm-bbmaj.wav',                                          bpm: 128, category: 'chords' },
+  // --- Bass loops (category 'bass', all D# Minor) ---
+  { name: 'Chill House', file: 'loops/_128/bass/looperman-l-0052497-0426346-chill-house-bass-110-bpm C.wav',                       bpm: 128, category: 'bass' }, // src C, pitched +3 to D#
+  { name: 'EDM Lead',    file: 'loops/_128/bass/looperman-l-2328394-0297436-hard-edm-leads-part-1-sicklunarozza 155 BPM D#m.wav', bpm: 128, category: 'bass' },
+  { name: 'Cyber Bass',  file: 'loops/_128/bass/looperman-l-3189526-0283404-cyber-bass-synth 90 BPM D#m.wav',                     bpm: 128, category: 'bass' },
+  { name: 'Yuno',        file: 'loops/_128/bass/looperman-l-4326607-0426177-yuno-bass 150 BPM D#m.wav',                           bpm: 128, category: 'bass' },
+  { name: 'Sequence',    file: 'loops/_128/bass/looperman-l-6413071-0375484-circuential-sequence-05 140 BPM D#m.wav',             bpm: 128, category: 'bass' },
+  { name: 'Banjo Bass',  file: 'loops/_128/bass/looperman-l-7155116-0375250-banjo-type-bass 133 BPM D#m.wav',                    bpm: 128, category: 'bass' },
+  { name: 'Jupiter',     file: 'loops/_128/bass/looperman-l-7155116-0422599-timrgyt-jupiter-plus-bass-loop 107 BPM D#m.wav',      bpm: 128, category: 'bass' },
+  { name: 'Iron Man',    file: 'loops/_128/bass/looperman-l-7155116-0424675-timzenhq-iron-man-fabfilter-twin-3-loop 108 BPM Dm.wav', bpm: 128, category: 'bass' }, // src Dm, pitched +1 to D#
 ];
 
 function playbackRateFor(loopBpm, curBpm) {

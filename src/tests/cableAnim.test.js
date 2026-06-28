@@ -19,14 +19,6 @@ test('flowDotDistances: zero/negative length -> empty', () => {
   assert.deepStrictEqual(cableAnim.flowDotDistances(-5, 55, 130, 0), []);
 });
 
-test('pulseProgress: in-window fraction, null outside', () => {
-  assert.strictEqual(cableAnim.pulseProgress(1000, 1075, 150), 0.5);
-  assert.strictEqual(cableAnim.pulseProgress(1000, 1000, 150), 0);
-  assert.strictEqual(cableAnim.pulseProgress(1000, 1150, 150), null); // p=1 -> null
-  assert.strictEqual(cableAnim.pulseProgress(1000, 900, 150), null);  // negative
-  assert.strictEqual(cableAnim.pulseProgress(null, 1000, 150), null); // no hit yet
-});
-
 test('meterToUnit: maps dB to [0,1], clamps, handles -Infinity', () => {
   assert.strictEqual(cableAnim.meterToUnit(0), 1);
   assert.strictEqual(cableAnim.meterToUnit(-48), 0);
@@ -37,14 +29,11 @@ test('meterToUnit: maps dB to [0,1], clamps, handles -Infinity', () => {
   assert.strictEqual(cableAnim.meterToUnit(NaN), 0);
 });
 
-test('flowSpeed: audio scales with level, lfo with rate, sequencer is 0', () => {
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'audio', level: 0 }), 52);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'audio', level: 1 }), 130);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'audio', level: 0.5 }), 91);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'control', ctrl: 'sequencer' }), 0);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'control', ctrl: 'lfo', lfoRate: 8 }), 112);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'control', ctrl: 'lfo', lfoRate: 0.1 }), 20);
-  assert.strictEqual(cableAnim.flowSpeed({ kind: 'control', ctrl: 'lfo', lfoRate: 100 }), 120);
+test('flowSpeed: audio scales with level (52..130 px/s)', () => {
+  assert.strictEqual(cableAnim.flowSpeed({ level: 0 }), 52);
+  assert.strictEqual(cableAnim.flowSpeed({ level: 1 }), 130);
+  assert.strictEqual(cableAnim.flowSpeed({ level: 0.5 }), 91);
+  assert.strictEqual(cableAnim.flowSpeed(), 52); // default level 0
 });
 
 test('waveSamples: sample count includes both endpoints', () => {
@@ -81,14 +70,6 @@ test('echoEnvelope: full at source, steps down toward dest, in (0,1]', () => {
   const b = cableAnim.echoEnvelope(90, 100, {});
   assert.ok(b <= a && a <= 1 && b > 0);
   assert.strictEqual(cableAnim.echoEnvelope(10, 0, {}), 0);
-});
-
-test('cometTail: segments trail behind head, clipped to [0,len)', () => {
-  const t = cableAnim.cometTail(50, 3, 8, 100);
-  assert.deepStrictEqual(t.map(s => s.d), [42, 34, 26]);
-  assert.ok(t.every(s => s.alpha > 0 && s.alpha < 1));
-  assert.ok(t[0].alpha > t[2].alpha);
-  assert.deepStrictEqual(cableAnim.cometTail(5, 3, 8, 100), []);
 });
 
 test('peakEnvelope: n buckets, each the max abs, in [0,1]', () => {

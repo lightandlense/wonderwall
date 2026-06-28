@@ -72,15 +72,11 @@
   <!-- New for Reactable Wall -->
   <script src="src/utils/angleSmoothing.js"></script>
   <script src="src/utils/tonality.js"></script>
-  <script src="src/utils/rhythmPatterns.js"></script>
   <script src="src/utils/cableAnim.js"></script>
   <script src="src/data/loopBank.js"></script>
-  <script src="src/data/bassLines.js"></script>
-  <script src="src/data/melodyLines.js"></script>
   <script src="src/services/moduleRegistry.js"></script>
   <script src="src/services/audioEngine.js"></script>
   <script src="src/components/visualEngine.js"></script>
-  <script src="src/services/modulationMatrix.js"></script>
   <script src="src/services/routingGraph.js"></script>
   <!-- Starts webcam automatically on load -->
   <script src="src/services/tracking.js"></script>
@@ -129,12 +125,8 @@
         const vp = { w: window.innerWidth, h: window.innerHeight };
         const plan = routingGraph.update(active, vp);
         applyRoutingPlan(plan);
-        updateModulation();
-        const modulations = modulationMatrix.compute(active, vp);
-        setModulations(modulations);
         const edges = routingGraph.getEdges(plan, active, vp);
         visualEngine.setFrame(detected, edges);
-        visualEngine.setModulationEdges(modulationMatrix.getEdges(modulations));
       } catch (err) {
         console.error('[onMarkersDetected] frame error (loop continues):', err);
       }

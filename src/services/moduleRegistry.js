@@ -181,19 +181,20 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 16: Bass — rotation selects EDM bassline preset
+  // ID 16: Bass — rotation selects a bass loop (category 'bass', all D# Minor)
   16: {
-    id: 16, name: 'Bass', type: 'bass', color: '#44ff99', paramLabel: 'Line',
+    id: 16, name: 'Bass', type: 'sampler', color: '#44ff99', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLineIndex(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      const n = bl.BASS_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    getLoopIndex(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'bass');
+      const n = indices.length;
+      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
     },
     getName(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      const l = bl.BASS_LINES[this.getLineIndex(angle)];
-      return l ? l.name : '';
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
+      return e ? e.name : '';
     },
   },
 

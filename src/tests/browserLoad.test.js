@@ -79,11 +79,8 @@ function makeSandbox() {
 const SCRIPTS = [
   'src/utils/angleSmoothing.js',
   'src/utils/tonality.js',
-  'src/utils/rhythmPatterns.js',
   'src/utils/cableAnim.js',
   'src/data/loopBank.js',
-  'src/data/bassLines.js',
-  'src/data/melodyLines.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',
   'src/components/visualEngine.js',
@@ -101,7 +98,7 @@ test('all browser scripts load in one shared scope without redeclaration errors'
   const ctx = makeSandbox();
   assert.doesNotThrow(() => loadAll(ctx), 'a top-level const/let/class collides across scripts');
   // Globals the frame loop depends on must be exposed.
-  for (const name of ['reconcileModules', 'getActiveModules', 'applyRoutingPlan', 'routingGraph', 'visualEngine', 'MODULE_REGISTRY', 'getSeqPulses']) {
+  for (const name of ['reconcileModules', 'getActiveModules', 'applyRoutingPlan', 'routingGraph', 'visualEngine', 'MODULE_REGISTRY']) {
     assert.ok(ctx[name] !== undefined, `global '${name}' not exposed`);
   }
 });
@@ -118,7 +115,6 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
       const active = getActiveModules();
       const plan = routingGraph.update(active, { w: 1280, h: 720 });
       applyRoutingPlan(plan);
-      updateModulation();
       const edges = routingGraph.getEdges(plan, active, { w: 1280, h: 720 });
       visualEngine.draw(detected, edges);
     };
@@ -127,7 +123,6 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
   const osc = { id: 0, wx: 100, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const out = { id: 3, wx: 300, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
   const filt = { id: 1, wx: 200, wy: 100, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  const lfo = { id: 4, wx: 210, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
 
   ctx.onMarkersDetected([]);          // audio off, no markers
   ctx.onMarkersDetected([osc, out]);  // audio off, markers present
@@ -135,14 +130,9 @@ test('the per-frame handler does not throw (audio off and on, empty + osc/out ma
 
   assert.doesNotThrow(() => {
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, out]); // audio on, debounce commits chain
-    // LFO + osc + filter + output (the combo that froze): many frames, must stay clean
-    for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, filt, out, lfo]);
-    // Sequencer + oscillator: exercises sequencer link, gating transitions, melodic walk path
-    const seqM = { id: 6, wx: 110, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-    const ton5 = { id: 5, wx: 600, wy: 600, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-    for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, seqM]);        // gates the oscillator
-    for (let i = 0; i < 6; i++) ctx.onMarkersDetected([osc, seqM, ton5]);   // melodic walk active
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc]);               // sequencer removed -> resume drone
+    // osc + filter + output across many frames: routing churn must stay clean
+    for (let i = 0; i < 12; i++) ctx.onMarkersDetected([osc, filt, out]);
+    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc]);
   });
 });
 
@@ -171,7 +161,7 @@ test('oscillator + output produces an audio path that reaches the speaker', asyn
     'oscillator is not connected through to Destination — the output got disconnected from the speaker');
 });
 
-test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
+test('getModuleLevel is exposed and returns a number in [0,1]', async () => {
   const ctx = makeSandbox();
   loadAll(ctx);
   const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
@@ -184,16 +174,12 @@ test('getModuleLevel / getLfoRate are exposed and return numbers', async () => {
   await vm.runInContext('initAudio()', ctx);
 
   const osc = { id: 0, wx: 100, wy: 100, angle: 0 };
-  const lfo = { id: 4, wx: 200, wy: 120, angle: 0 };
-  for (let i = 0; i < 3; i++) ctx.onMarkersDetected([osc, lfo]);
+  for (let i = 0; i < 3; i++) ctx.onMarkersDetected([osc]);
 
   const lvl = vm.runInContext('getModuleLevel(0)', ctx);
   assert.strictEqual(typeof lvl, 'number');
   assert.ok(lvl >= 0 && lvl <= 1, 'level in [0,1]');
   assert.strictEqual(vm.runInContext('getModuleLevel(999)', ctx), 0, 'unknown id -> 0');
-  const rate = vm.runInContext('getLfoRate(4)', ctx);
-  assert.strictEqual(typeof rate, 'number');
-  assert.ok(rate >= 0.1 && rate <= 8, 'lfo rate within design range');
 });
 
 test('PitchShift (id 7) + Tempo: pitchshift inserts on chain, rotation applies cleanly', async () => {
@@ -205,7 +191,6 @@ test('PitchShift (id 7) + Tempo: pitchshift inserts on chain, rotation applies c
   vm.runInContext(`window.onMarkersDetected = function (d) {
     reconcileModules(d); const a = getActiveModules();
     const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
-    updateModulation();
     const edges = routingGraph.getEdges(p, a, { w: 1280, h: 720 });
     visualEngine.draw(d, edges);
   };`, ctx);
@@ -221,33 +206,5 @@ test('PitchShift (id 7) + Tempo: pitchshift inserts on chain, rotation applies c
   assert.doesNotThrow(() => {
     const psRot = { id: 7, wx: 400, wy: 350, angle: Math.PI / 4, screenCorners: ps.screenCorners };
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, psRot, tempo]);
-  });
-});
-
-test('Oscillator + Sequencer + Tonality: sequencer gates osc; tonality quantizes pitch', async () => {
-  const ctx = makeSandbox();
-  loadAll(ctx);
-  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
-  ctx.__fakeCtx = fakeCtx;
-  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
-  vm.runInContext(`window.onMarkersDetected = function (d) {
-    reconcileModules(d); const a = getActiveModules();
-    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
-    updateModulation();
-    const edges = routingGraph.getEdges(p, a, { w: 1280, h: 720 });
-    visualEngine.draw(d, edges);
-  };`, ctx);
-  await vm.runInContext('initAudio()', ctx);
-
-  const osc = { id: 0, wx: 200, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  const seq = { id: 6, wx: 110, wy: 130, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-  const ton = { id: 5, wx: 900, wy: 200, angle: 0, screenCorners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] };
-
-  for (let i = 0; i < 6; i++) ctx.onMarkersDetected([osc, seq, ton]);
-  assert.ok(ctx.__synthReachesDest(), 'oscillator/sequencer should reach master');
-  assert.strictEqual(vm.runInContext('typeof getModuleLevel(0)', ctx), 'number');
-  assert.doesNotThrow(() => {
-    const oscRot = { id: 0, wx: 200, wy: 200, angle: Math.PI / 4, screenCorners: osc.screenCorners };
-    for (let i = 0; i < 4; i++) ctx.onMarkersDetected([oscRot, seq, ton]);
   });
 });

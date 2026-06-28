@@ -9,27 +9,16 @@ const cableAnim = {
     for (let d = offset; d < length; d += spacing) out.push(d);
     return out;
   },
-  // Progress [0,1) of a one-shot pulse since lastHitMs, or null if outside the window.
-  pulseProgress(lastHitMs, nowMs, durMs) {
-    if (lastHitMs == null || !(durMs > 0)) return null;
-    const p = (nowMs - lastHitMs) / durMs;
-    return (p >= 0 && p < 1) ? p : null;
-  },
   // Map a meter reading in dB to [0,1]. floor dB -> 0, 0 dB -> 1, clipping clamps.
   meterToUnit(db, floor = -48) {
     if (!(db > floor)) return 0;            // handles <=floor, -Infinity, NaN
     const u = (db - floor) / (0 - floor);
     return u > 1 ? 1 : u;
   },
-  // Scroll speed (px/sec) for a cable's signal animation.
-  flowSpeed({ kind, ctrl, level = 0, lfoRate = 1 } = {}) {
-    if (ctrl === 'sequencer') return 0;              // beat-synced pulse, no scroll
-    if (ctrl === 'lfo') {
-      const s = lfoRate * 14;                        // ~0.1..8 Hz -> ~1.4..112 px/s
-      return s < 20 ? 20 : (s > 120 ? 120 : s);
-    }
+  // Scroll speed (px/sec) for an audio cable's signal animation: 52..130 px/s by level.
+  flowSpeed({ level = 0 } = {}) {
     const lv = level < 0 ? 0 : (level > 1 ? 1 : level);
-    return 130 * (0.4 + 0.6 * lv);                   // audio: 52..130 px/s
+    return 130 * (0.4 + 0.6 * lv);
   },
   // Perpendicular offsets along a cable: offset(d) = amplitude * shape(phase + d/wavelength).
   // Samples at d = 0, step, 2*step, ... plus a final sample at exactly `len`.
@@ -60,16 +49,6 @@ const cableAnim = {
     const frac = d <= 0 ? 0 : (d >= len ? 1 - 1e-9 : d / len);
     const band = Math.min(count - 1, Math.floor(frac * count));
     return Math.pow(decay, band);
-  },
-  // Fading tail segments behind a head dot at `headDist` (motion is source->dest).
-  cometTail(headDist, segCount, segSpacing, len) {
-    const out = [];
-    for (let i = 1; i <= segCount; i++) {
-      const d = headDist - i * segSpacing;
-      if (d < 0 || d >= len) continue;
-      out.push({ d, alpha: 1 - i / (segCount + 1) });
-    }
-    return out;
   },
   // Downsample a sample array into n peak magnitudes (max abs per bucket), in [0,1].
   peakEnvelope(samples, n) {
