@@ -13,11 +13,11 @@ test('LOOP_BANK: every entry well-formed (pre-baked 128, under loops/_128/)', ()
   }
 });
 
-test('LOOP_BANK: 10 drum, 8 melody, 5 chord loops', () => {
+test('LOOP_BANK: 10 drum, 8 melody, 8 chord loops', () => {
   const by = (c) => loopBank.LOOP_BANK.filter(e => e.category === c).length;
   assert.strictEqual(by('drums'), 10, 'drum count');
   assert.strictEqual(by('melody'), 8, 'melody count');
-  assert.strictEqual(by('chords'), 5, 'chord count');
+  assert.strictEqual(by('chords'), 8, 'chord count');
 });
 
 test('playbackRateFor: ratio of current to loop bpm, guarded', () => {

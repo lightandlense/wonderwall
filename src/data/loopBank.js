@@ -26,11 +26,14 @@ const LOOP_BANK = [
   { name: 'Quest',       file: 'loops/_128/Melody/Cymatics - Quest - 140 BPM Ds Min.wav',      bpm: 128, category: 'melody' },
   { name: 'Razor',       file: 'loops/_128/Melody/Cymatics - Razor - 128 BPM Ds Min.wav',      bpm: 128, category: 'melody' },
   // --- Chord loops (category 'chords', all D# Minor) ---
-  { name: 'Phrog',       file: 'loops/_128/Chords/looperman-l-2212484-0214543-phrog-progressive-house-chords- 128 BPM, D#m.wav', bpm: 128, category: 'chords' },
-  { name: 'Short Synth', file: 'loops/_128/Chords/looperman-l-5903669-0385270-short-synth-loop- 95 BPM D#m.wav',                 bpm: 128, category: 'chords' },
-  { name: 'Psy Chorus',  file: 'loops/_128/Chords/looperman-l-6413071-0415019-je-8086-psy-chorus- 138 BPM D#m.wav',             bpm: 128, category: 'chords' },
-  { name: 'Reese',       file: 'loops/_128/Chords/looperman-l-7722845-0426217-reese-with-big-r - 134 BPM D#m.wav',              bpm: 128, category: 'chords' },
-  { name: 'Epic Synth',  file: 'loops/_128/Chords/looperman-l-7722845-0426218-epic-synth - 134 BPM D#m.wav',                    bpm: 128, category: 'chords' },
+  { name: 'Phrog',           file: 'loops/_128/Chords/looperman-l-2212484-0214543-phrog-progressive-house-chords- 128 BPM, D#m.wav',                      bpm: 128, category: 'chords' },
+  { name: 'Short Synth',     file: 'loops/_128/Chords/looperman-l-5903669-0385270-short-synth-loop- 95 BPM D#m.wav',                                       bpm: 128, category: 'chords' },
+  { name: 'Psy Chorus',      file: 'loops/_128/Chords/looperman-l-6413071-0415019-je-8086-psy-chorus- 138 BPM D#m.wav',                                    bpm: 128, category: 'chords' },
+  { name: 'Light Tribute',   file: 'loops/_128/Chords/looperman-l-1638381-0348772-light-tribute 140 BPM D#m.wav',                                          bpm: 128, category: 'chords' },
+  { name: 'Synth',           file: 'loops/_128/Chords/looperman-l-4320581-0387096-synth 110 BPM D#m.wav',                                                  bpm: 128, category: 'chords' },
+  { name: 'Rage',            file: 'loops/_128/Chords/looperman-l-4946014-0300692-rage-002-gab3-x-outtatown-x-starboy-type-loop 154 BPM D#m.wav',          bpm: 128, category: 'chords' },
+  { name: 'Emotional Piano', file: 'loops/_128/Chords/looperman-l-5654333-0362062-emotional-piano-song-starter-wings 128 BPM D#m.wav',                     bpm: 128, category: 'chords' },
+  { name: 'Rhino Charge',    file: 'loops/_128/Chords/looperman-l-7155116-0380287-timrgyt-rhino-charge-loop 195 BPM D#m.wav',                              bpm: 128, category: 'chords' },
 ];
 
 function playbackRateFor(loopBpm, curBpm) {
