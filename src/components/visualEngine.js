@@ -205,7 +205,7 @@ const visualEngine = (() => {
       visCtx.restore();
     }
 
-    _drawDebugOverlay(detectedWorldMarkers, W, H);
+    if (window.showOverlay !== false) _drawDebugOverlay(detectedWorldMarkers, W, H);
   }
 
   function _drawDebugOverlay(markers, W, H) {

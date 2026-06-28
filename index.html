@@ -45,6 +45,7 @@
 </head>
 <body>
 
+  <div id="key-hints">M: toggle markers &nbsp;|&nbsp; [ ]: marker size &nbsp;|&nbsp; C: calibration &nbsp;|&nbsp; W: webcam &nbsp;|&nbsp; O: overlay</div>
   <canvas id="debug-canvas"></canvas>
   <canvas id="vis-canvas"></canvas>
   <canvas id="calib-canvas"></canvas>
@@ -58,7 +59,6 @@
     <button id="start-btn">TAP TO START</button>
   </div>
 
-  <div id="key-hints">M: toggle markers &nbsp;|&nbsp; [ ]: marker size &nbsp;|&nbsp; C: calibration &nbsp;|&nbsp; W: webcam</div>
 
   <!-- Tone.js audio engine -->
   <script src="https://cdn.jsdelivr.net/npm/tone/build/Tone.js"></script>
@@ -183,6 +183,14 @@
         case 'w':
           window.toggleWebcam();
           break;
+
+        // O — toggle debug overlay (green boxes + status bars) and hints
+        case 'o': {
+          window.showOverlay = window.showOverlay === false ? true : false;
+          const hints = document.getElementById('key-hints');
+          if (hints) hints.style.display = window.showOverlay === false ? 'none' : 'block';
+          break;
+        }
       }
     });
   </script>
