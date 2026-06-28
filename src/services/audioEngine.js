@@ -195,6 +195,8 @@ function _updateModule(id, marker) {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);
     _applyLoopRates(bpm);
+  } else if (m.def.type === 'global' && m.def.subtype === 'loopgroup') {
+    _loopBank.setActiveGroup(m.def.getGroup(angle));
   }
 }
 

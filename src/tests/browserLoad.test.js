@@ -208,3 +208,26 @@ test('PitchShift (id 7) + Tempo: pitchshift inserts on chain, rotation applies c
     for (let i = 0; i < 4; i++) ctx.onMarkersDetected([osc, psRot, tempo]);
   });
 });
+
+test('Loop Bank puck sets the active group from rotation', async () => {
+  const ctx = makeSandbox();
+  loadAll(ctx);
+  const fakeCtx = new Proxy({}, { get: (t, k) => (k === 'canvas' ? { width: 1280, height: 720 } : k === 'createLinearGradient' ? (() => ({ addColorStop() {} })) : () => {}) });
+  ctx.__fakeCtx = fakeCtx;
+  vm.runInContext('visualEngine.init({getContext:()=>window.__fakeCtx},{getContext:()=>window.__fakeCtx})', ctx);
+  vm.runInContext(`window.onMarkersDetected = function (d) {
+    reconcileModules(d); const a = getActiveModules();
+    const p = routingGraph.update(a, { w: 1280, h: 720 }); applyRoutingPlan(p);
+  };`, ctx);
+  await vm.runInContext('initAudio()', ctx);
+
+  // Rotate the Loop Bank puck (id 12) to the top of the arc -> last group (futurebass).
+  const bank = { id: 12, wx: 600, wy: 600, angle: Math.PI / 4 };
+  for (let i = 0; i < 3; i++) ctx.onMarkersDetected([bank]);
+  assert.strictEqual(vm.runInContext('window.loopBank.activeGroup', ctx), 'futurebass');
+
+  // Rotate to the bottom of the arc -> first group (og).
+  const bankOg = { id: 12, wx: 600, wy: 600, angle: 3 * Math.PI / 2 };
+  for (let i = 0; i < 3; i++) ctx.onMarkersDetected([bankOg]);
+  assert.strictEqual(vm.runInContext('window.loopBank.activeGroup', ctx), 'og');
+});
