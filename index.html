@@ -75,7 +75,6 @@
   <script src="src/utils/rhythmPatterns.js"></script>
   <script src="src/utils/cableAnim.js"></script>
   <script src="src/data/loopBank.js"></script>
-  <script src="src/data/drumGrooves.js"></script>
   <script src="src/data/bassLines.js"></script>
   <script src="src/data/chordProgressions.js"></script>
   <script src="src/data/melodyLines.js"></script>
@@ -203,8 +202,8 @@
 
         // B — toggle background between black and white
         case 'b': {
-          const isBlack = document.body.style.background !== '#fff';
-          document.body.style.background = isBlack ? '#fff' : '#000';
+          window._bgWhite = !window._bgWhite;
+          document.body.style.background = window._bgWhite ? '#fff' : '#000';
           break;
         }
       }
