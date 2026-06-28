@@ -5,13 +5,12 @@
 const MODULATION_THRESHOLD_FRAC = 0.32; // fraction of viewport width
 
 const VALID_PAIRS = new Set([
-  'drummer:bass',   'drummer:chords', 'drummer:lead',
-  'bass:drummer',   'bass:chords',    'bass:lead',
-  'chords:drummer', 'chords:bass',    'chords:lead',
-  'lead:drummer',   'lead:bass',      'lead:chords',
+  'bass:chords',  'bass:lead',
+  'chords:bass',  'chords:lead',
+  'lead:bass',    'lead:chords',
 ]);
 
-const BAND_TYPES = new Set(['drummer', 'bass', 'chords', 'lead']);
+const BAND_TYPES = new Set(['bass', 'chords', 'lead']);
 
 function _dist(a, b) {
   const dx = a.wx - b.wx, dy = a.wy - b.wy;
