@@ -34,6 +34,9 @@ const LOOP_BANK = [
   { name: 'Rage',            file: 'loops/_128/Chords/looperman-l-4946014-0300692-rage-002-gab3-x-outtatown-x-starboy-type-loop 154 BPM D#m.wav',          bpm: 128, category: 'chords' },
   { name: 'Emotional Piano', file: 'loops/_128/Chords/looperman-l-5654333-0362062-emotional-piano-song-starter-wings 128 BPM D#m.wav',                     bpm: 128, category: 'chords' },
   { name: 'Rhino Charge',    file: 'loops/_128/Chords/looperman-l-7155116-0380287-timrgyt-rhino-charge-loop 195 BPM D#m.wav',                              bpm: 128, category: 'chords' },
+  // Pitch-shifted to D# root (sources were B / B-flat major; see scripts note). Bbmaj stays major-flavored.
+  { name: 'Paragon',         file: 'loops/_128/Chords/looperman-l-4055719-0426572-paragon-140bpm-b.wav',                                                  bpm: 128, category: 'chords' },
+  { name: 'Broken Soul',     file: 'loops/_128/Chords/looperman-l-4055719-0427155-broken-soul-151bpm-bbmaj.wav',                                          bpm: 128, category: 'chords' },
 ];
 
 function playbackRateFor(loopBpm, curBpm) {

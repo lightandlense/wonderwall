@@ -72,7 +72,7 @@ test('Chords (id 6): is a sampler that only selects chord-category loops', () =>
     assert.strictEqual(lb.LOOP_BANK[idx].category, 'chords', `angle ${angle} -> non-chord`);
   }
   assert.strictEqual(lb.LOOP_BANK[ch.getLoopIndex(3 * Math.PI / 2)].name, 'Phrog');
-  assert.strictEqual(lb.LOOP_BANK[ch.getLoopIndex(Math.PI / 4)].name, 'Rhino Charge');
+  assert.strictEqual(lb.LOOP_BANK[ch.getLoopIndex(Math.PI / 4)].name, 'Broken Soul');
   assert.ok(typeof ch.getName(0) === 'string' && ch.getName(0).length > 0);
 });
 
