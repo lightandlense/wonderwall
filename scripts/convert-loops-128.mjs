@@ -10,7 +10,7 @@ import { readdirSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 const TARGET_BPM = 128;
-const SRC_DIRS = ['loops/Melody', 'loops/drummer'];
+const SRC_DIRS = ['loops/Melody', 'loops/drummer', 'loops/Chords'];
 const OUT_ROOT = 'loops/_128';
 
 function nativeBpm(file) {

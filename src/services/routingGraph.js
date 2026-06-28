@@ -23,8 +23,7 @@ function buildRawPlan(modules, viewport, prevMembership) {
 
   const gens = modules.filter(m =>
     m.def.type === 'oscillator' || m.def.type === 'sampler' ||
-    m.def.type === 'bass'      || m.def.type === 'chords'  ||
-    m.def.type === 'lead');
+    m.def.type === 'bass'      || m.def.type === 'lead');
   const effects = modules.filter(m => m.def.type === 'effect');
   const controllers = modules.filter(m => m.def.type === 'controller');
   const tonalityMod = modules.find(m => m.def.type === 'global' && m.def.subtype === 'tonality');

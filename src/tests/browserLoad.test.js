@@ -82,7 +82,6 @@ const SCRIPTS = [
   'src/utils/cableAnim.js',
   'src/data/loopBank.js',
   'src/data/bassLines.js',
-  'src/data/chordProgressions.js',
   'src/data/melodyLines.js',
   'src/services/moduleRegistry.js',
   'src/services/audioEngine.js',

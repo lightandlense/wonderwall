@@ -1,16 +1,15 @@
 // src/services/modulationMatrix.js
-// Computes cross-modulation depths for the 12 band-puck-pair relationships.
+// Computes cross-modulation depths for the band-puck-pair relationships.
 // Pure — no Tone.js, no DOM. Call compute() each detection frame.
 
 const MODULATION_THRESHOLD_FRAC = 0.32; // fraction of viewport width
 
 const VALID_PAIRS = new Set([
-  'bass:chords',  'bass:lead',
-  'chords:bass',  'chords:lead',
-  'lead:bass',    'lead:chords',
+  'bass:lead',
+  'lead:bass',
 ]);
 
-const BAND_TYPES = new Set(['bass', 'chords', 'lead']);
+const BAND_TYPES = new Set(['bass', 'lead']);
 
 function _dist(a, b) {
   const dx = a.wx - b.wx, dy = a.wy - b.wy;
@@ -30,7 +29,7 @@ function compute(modules, viewport) {
       const src = relevant[i], dst = relevant[j];
       const key = `${src.def.type}:${dst.def.type}`;
       if (!VALID_PAIRS.has(key)) continue;
-      if (result.has(key)) continue; // one entry per pair (only one drummer, etc.)
+      if (result.has(key)) continue; // one entry per pair
 
       const dist = _dist(src, dst);
       if (dist >= threshold) continue;

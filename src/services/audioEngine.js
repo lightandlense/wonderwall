@@ -18,10 +18,8 @@ const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatter
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
 const _bassLines = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-const _chordProgs = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
 const _melodyLines = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
 const BASS_BASE_FREQ = 65.41;    // C2 anchor for the bass register
-const CHORD_BASE_FREQ = 261.63;  // C4 anchor for the chord pad
 const LEAD_BASE_FREQ = 523.25;   // C5 anchor for the lead (sits above bass + pad)
 const DEFAULT_ROOT = 0;          // C, when no Tonality puck is present
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
@@ -98,19 +96,13 @@ function _onStep(time) {
   _step = (_step + 1) % _rhythm.STEPS;
 
   // --- Cross-modulation: gather this-step intent for all band pucks ---
-  let _xm_chordDeg = null, _xm_bassDeg = null, _xm_melodyDeg = null;
-  let _xm_bassStepCount = 0;
+  let _xm_bassDeg = null, _xm_melodyDeg = null;
 
   Object.values(activeModules).forEach(m => {
     if (m.def.type === 'bass') {
       const line = _bassLines.BASS_LINES[m.presetIdx];
       const d = line && line.steps[_step];
       if (d != null) _xm_bassDeg = d;
-      if (line) _xm_bassStepCount = line.steps.filter(s => s != null).length;
-    } else if (m.def.type === 'chords') {
-      const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
-      const d = prog && prog.steps[_step];
-      if (d != null) _xm_chordDeg = d;
     } else if (m.def.type === 'lead') {
       const mel = _melodyLines.MELODY_LINES[m.presetIdx];
       const d = mel && mel.steps[_step];
@@ -152,7 +144,7 @@ function _onStep(time) {
     try { tgt.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
   });
 
-  // Bass + Chords pucks: self-play their selected preset each step, voiced in the Tonality key.
+  // Bass + Lead pucks: self-play their selected preset each step, voiced in the Tonality key.
   const _root = (_tonality && _tonality.active) ? _tonality.root : DEFAULT_ROOT;
   Object.keys(activeModules).forEach(idStr => {
     const m = activeModules[idStr];
@@ -161,12 +153,6 @@ function _onStep(time) {
       const line = _bassLines.BASS_LINES[m.presetIdx];
       let deg = line && line.steps[_step];
       if (deg == null) return;
-
-      // Chords → Bass: chord root gravity — bias bass note toward chord root
-      if (_modDepth('chords', 'bass') > 0 && _xm_chordDeg != null
-          && Math.random() < _modDepth('chords', 'bass')) {
-        deg = _xm_chordDeg;
-      }
 
       // Melody → Bass: ascending melody lifts bass an octave
       const octShift = (_modDepth('lead', 'bass') > 0.5 && _xm_melodyAscending
@@ -177,34 +163,6 @@ function _onStep(time) {
         '8n', time,
       ); } catch (_) {}
 
-    } else if (m.def.type === 'chords') {
-      const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
-      let d = prog && prog.steps[_step];
-
-      if (d == null) return;
-
-      // Bass → Chords: bass rotation spreads the top chord note upward
-      let topDeg = d + 4;
-      const bCDepth = _modDepth('bass', 'chords');
-      if (bCDepth > 0) {
-        const bm = Object.values(activeModules).find(x => x.def.type === 'bass');
-        if (bm) {
-          const bassT = bm.smoother.get() / (2 * Math.PI); // [0,1]
-          topDeg += Math.round(bassT * bCDepth * 7);        // spread up to one extra octave
-        }
-      }
-
-      // Melody → Chords: inversion that puts melody note on top
-      if (_modDepth('lead', 'chords') > 0.5 && _xm_melodyDeg != null
-          && _xm_melodyDeg > topDeg) {
-        topDeg = topDeg + 7; // raise top note one octave to sit above melody
-      }
-
-      const freqs = [d, d + 2, topDeg].map(
-        x => _tonalityUtil.scaleDegreeFreq(CHORD_BASE_FREQ, _root, x)
-      );
-      try { m.node.triggerAttackRelease(freqs, '2n', time); } catch (_) {}
-
     } else if (m.def.type === 'lead') {
       const mel = _melodyLines.MELODY_LINES[m.presetIdx];
       let deg = mel && mel.steps[_step];
@@ -214,15 +172,6 @@ function _onStep(time) {
       if (_modDepth('bass', 'lead') > 0 && _xm_bassDeg != null
           && Math.random() < _modDepth('bass', 'lead')) {
         deg = _xm_bassDeg + 7; // same scale degree, one octave up
-      }
-
-      // Chords → Melody: snap to nearest chord tone
-      if (_modDepth('chords', 'lead') > 0 && _xm_chordDeg != null
-          && Math.random() < _modDepth('chords', 'lead')) {
-        const tones = [_xm_chordDeg, _xm_chordDeg + 2, _xm_chordDeg + 4];
-        deg = tones.reduce((best, t) =>
-          Math.abs(t - deg) < Math.abs(best - deg) ? t : best, tones[0]
-        );
       }
 
       try { m.node.triggerAttackRelease(
@@ -316,15 +265,6 @@ function _addModule(id, marker) {
     });
     meter = new Tone.Meter({ smoothing: 0.8 });
     node.connect(meter);
-  } else if (def.type === 'chords') {
-    presetIdx = def.getProgIndex(smoother.get());
-    node = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.3, decay: 0.2, sustain: 0.7, release: 0.8 },
-      volume: -16,
-    });
-    meter = new Tone.Meter({ smoothing: 0.8 });
-    node.connect(meter);
   } else if (def.type === 'lead') {
     presetIdx = def.getMelodyIndex(smoother.get());
     node = new Tone.Synth({
@@ -400,8 +340,6 @@ function _updateModule(id, marker) {
     }
   } else if (m.def.type === 'bass') {
     m.presetIdx = m.def.getLineIndex(angle);
-  } else if (m.def.type === 'chords') {
-    m.presetIdx = m.def.getProgIndex(angle);
   } else if (m.def.type === 'lead') {
     m.presetIdx = m.def.getMelodyIndex(angle);
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
@@ -489,7 +427,6 @@ let _lastModTime = null;   // performance.now() of the last modulation tick
 // Cross-modulation state (Phase 9)
 let _modulations = new Map();          // set each detection frame by setModulations()
 const _modState = {
-  prevChordDeg: null,                  // tracks chord changes for fill triggering
   melodyHistory: [],                   // last 3 melody degrees for contour detection
 };
 
