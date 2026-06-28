@@ -78,15 +78,21 @@ const visualEngine = (() => {
       const { wx, wy } = marker;
       const angle = mod.angle; // smoothed [0, 2π)
       const def   = mod.def;
-      const ringR = 50;
 
-      // Outer glow ring
+      // Size the ring to sit outside the physical marker. Derive half-diagonal
+      // from the calibrated screen corners so it adapts to zoom/projector distance.
+      const markerR = marker.screenCorners && marker.screenCorners.length === 4
+        ? marker.screenCorners.reduce((s, c) => s + Math.hypot(c.x - wx, c.y - wy), 0) / 4
+        : 50;
+      const ringR = Math.max(55, Math.round(markerR * 1.35));
+
+      // Outer glow ring — halo sits just outside the physical ArUco marker
       visCtx.save();
       visCtx.shadowColor = def.color;
-      visCtx.shadowBlur  = 24;
+      visCtx.shadowBlur  = 32;
       visCtx.strokeStyle = def.color;
-      visCtx.lineWidth   = 2;
-      visCtx.globalAlpha = 0.6;
+      visCtx.lineWidth   = 3;
+      visCtx.globalAlpha = 0.75;
       visCtx.beginPath();
       visCtx.arc(wx, wy, ringR, 0, 2 * Math.PI);
       visCtx.stroke();
