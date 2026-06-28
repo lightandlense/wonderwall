@@ -180,6 +180,24 @@ const visualEngine = (() => {
       visCtx.restore();
     }
 
+    // Loop Bank HUD pill (below the Tempo pill) when a Loop Bank puck is present
+    const bankMod = getActiveModules().find(m => m.def.subtype === 'loopgroup');
+    if (bankMod) {
+      visCtx.save();
+      visCtx.fillStyle   = 'rgba(20,14,30,0.85)';
+      visCtx.strokeStyle = '#3a2a5a';
+      const px3 = W - 360, py3 = 104;
+      visCtx.beginPath();
+      if (visCtx.roundRect) visCtx.roundRect(px3, py3, 220, 34, 17); else visCtx.rect(px3, py3, 220, 34);
+      visCtx.fill();
+      visCtx.stroke();
+      visCtx.fillStyle = '#c4a8ff';
+      visCtx.font      = '14px monospace';
+      visCtx.textAlign = 'left';
+      visCtx.fillText(`BANK  ${bankMod.def.getName(bankMod.angle)}`, px3 + 16, py3 + 22);
+      visCtx.restore();
+    }
+
     if (window.showOverlay !== false) _drawDebugOverlay(detectedWorldMarkers, W, H);
   }
 
