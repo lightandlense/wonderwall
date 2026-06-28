@@ -112,7 +112,7 @@ function _addModule(id, marker) {
   } else if (def.type === 'sampler') {
     loopIdx = def.getLoopIndex(smoother.get());
     const entry = _loopBank.LOOP_BANK[loopIdx];
-    const buf = LOOP_BUFFERS[entry.file];
+    const buf = entry && LOOP_BUFFERS[entry.file];
     console.log('[sampler] add id', id, 'loopIdx', loopIdx, 'file', entry && entry.file, 'buf?', !!buf, 'bufLoaded?', buf && buf.loaded, 'master?', !!master);
     if (buf) {
       try {

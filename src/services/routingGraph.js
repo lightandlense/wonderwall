@@ -4,7 +4,6 @@
 const CONSTANTS = {
   CONNECT_FRAC: 0.35,   // audio-hop distance as fraction of screen width
   KEEP_FACTOR: 1.0,     // existing hop stays connected out to KEEP_FACTOR x radius
-  CONTROL_FRAC: 0.30,   // controller<->target distance as fraction of screen width
   CHAIN_HOLD_FRAMES: 1, // frames a chain change must persist before committing
 };
 
