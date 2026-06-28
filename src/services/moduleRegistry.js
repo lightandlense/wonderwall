@@ -52,19 +52,20 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.wet.rampTo(t * 0.85, 0.05); },
   },
 
-  // ID 4: Drummer — rotation selects EDM groove preset
+  // ID 4: Drummer — rotation selects a drum loop (category 'drums')
   4: {
-    id: 4, name: 'Drummer', type: 'drummer', color: '#ff6b6b', paramLabel: 'Groove',
+    id: 4, name: 'Drummer', type: 'sampler', color: '#ff6b6b', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getGrooveIndex(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      const n = dg.DRUM_GROOVES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    getLoopIndex(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'drums');
+      const n = indices.length;
+      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
     },
     getName(angle) {
-      const dg = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
-      const g = dg.DRUM_GROOVES[this.getGrooveIndex(angle)];
-      return g ? g.name : '';
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
+      return e ? e.name : '';
     },
   },
 
@@ -94,19 +95,22 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 7: Melody — rotation selects EDM melody line preset
+  // ID 7: Melody — rotation selects a Cymatics melody loop
   7: {
-    id: 7, name: 'Melody', type: 'lead', color: '#ff44ff', paramLabel: 'Melody',
+    id: 7, name: 'Melody', type: 'sampler', color: '#ff44ff', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getMelodyIndex(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      const n = ml.MELODY_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    getLoopIndex(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'melody');
+      const n = indices.length;
+      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
     },
     getName(angle) {
-      const ml = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-      const m = ml.MELODY_LINES[this.getMelodyIndex(angle)];
-      return m ? m.name : '';
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const melody = lb.LOOP_BANK.filter(e => e.category === 'melody');
+      const n = melody.length;
+      const e = melody[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
+      return e ? e.name : '';
     },
   },
 
@@ -145,6 +149,22 @@ const MODULE_REGISTRY = {
     centerValue(t) { return Math.round(8 - t * 7); }, // 8..1 bits
     makeNode() { return new Tone.BitCrusher(8); },
     applyParam(node, t) { node.bits.value = Math.round(8 - t * 7); },
+  },
+
+  // ID 20: Loop — rotation selects a loop from the loop bank
+  20: {
+    id: 20, name: 'Loop', type: 'sampler', color: '#aaffee', paramLabel: 'Loop',
+    getParamT(angle) { return _arcT(angle); },
+    getLoopIndex(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const n = lb.LOOP_BANK.length;
+      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    },
+    getName(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
+      return e ? e.name : '';
+    },
   },
 
   // ID 16: Bass — rotation selects EDM bassline preset
