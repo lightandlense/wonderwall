@@ -82,14 +82,14 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 5: Tonality — global; rotation selects root pitch class
+  // ID 5: Volume — fades the nearest sound puck. 0 = silent, center = unity (0 dB), full = +6 dB.
   5: {
-    id: 5, name: 'Tonality', type: 'global', subtype: 'tonality', color: '#5de0d0', paramLabel: 'Root',
+    id: 5, name: 'Volume', type: 'effect', subtype: 'volume', color: '#5de0d0', paramLabel: 'Vol',
     getParamT(angle) { return _arcT(angle); },
-    getRoot(angle) {
-      const tn = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
-      return tn.rootFromT(_arcT(angle));
-    },
+    // lower half: -60..0 dB (silent up to unity); upper half: 0..+6 dB (boost). Center = 0 dB.
+    centerValue(t) { return t <= 0.5 ? -60 + (t / 0.5) * 60 : ((t - 0.5) / 0.5) * 6; },
+    makeNode() { return new Tone.Volume(0); },
+    applyParam(node, t) { node.volume.rampTo(this.centerValue(t), 0.05); },
   },
 
   // ID 6: Chords — rotation selects a chord loop (category 'chords')

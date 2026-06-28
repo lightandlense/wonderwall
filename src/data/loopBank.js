@@ -31,9 +31,7 @@ const LOOP_BANK = [
   { name: 'Psy Chorus',      file: 'loops/_128/Chords/looperman-l-6413071-0415019-je-8086-psy-chorus- 138 BPM D#m.wav',                                    bpm: 128, category: 'chords' },
   { name: 'Light Tribute',   file: 'loops/_128/Chords/looperman-l-1638381-0348772-light-tribute 140 BPM D#m.wav',                                          bpm: 128, category: 'chords' },
   { name: 'Synth',           file: 'loops/_128/Chords/looperman-l-4320581-0387096-synth 110 BPM D#m.wav',                                                  bpm: 128, category: 'chords' },
-  { name: 'Rage',            file: 'loops/_128/Chords/looperman-l-4946014-0300692-rage-002-gab3-x-outtatown-x-starboy-type-loop 154 BPM D#m.wav',          bpm: 128, category: 'chords' },
   { name: 'Emotional Piano', file: 'loops/_128/Chords/looperman-l-5654333-0362062-emotional-piano-song-starter-wings 128 BPM D#m.wav',                     bpm: 128, category: 'chords' },
-  { name: 'Rhino Charge',    file: 'loops/_128/Chords/looperman-l-7155116-0380287-timrgyt-rhino-charge-loop 195 BPM D#m.wav',                              bpm: 128, category: 'chords' },
   // Pitch-shifted to D# root (sources were B / B-flat major; see scripts note). Bbmaj stays major-flavored.
   { name: 'Paragon',         file: 'loops/_128/Chords/looperman-l-4055719-0426572-paragon-140bpm-b.wav',                                                  bpm: 128, category: 'chords' },
   { name: 'Broken Soul',     file: 'loops/_128/Chords/looperman-l-4055719-0427155-broken-soul-151bpm-bbmaj.wav',                                          bpm: 128, category: 'chords' },
