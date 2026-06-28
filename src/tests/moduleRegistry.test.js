@@ -17,7 +17,8 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[2].subtype, 'delay');
   assert.strictEqual(MODULE_REGISTRY[3].subtype, 'reverb');
   assert.strictEqual(MODULE_REGISTRY[4].type, 'sampler');   // Drummer is now a loop sampler
-  assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
+  assert.strictEqual(MODULE_REGISTRY[5].type, 'effect');    // Tonality replaced by Volume
+  assert.strictEqual(MODULE_REGISTRY[5].subtype, 'volume');
   assert.strictEqual(MODULE_REGISTRY[6].type, 'sampler');
   assert.strictEqual(MODULE_REGISTRY[7].type, 'sampler');   // Melody
   assert.strictEqual(MODULE_REGISTRY[8].subtype, 'tempo');
