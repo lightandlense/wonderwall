@@ -79,19 +79,20 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 6: Chords — rotation selects EDM chord progression preset
+  // ID 6: Chords — rotation selects a chord loop (category 'chords')
   6: {
-    id: 6, name: 'Chords', type: 'chords', color: '#ffaa44', paramLabel: 'Prog',
+    id: 6, name: 'Chords', type: 'sampler', color: '#ffaa44', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getProgIndex(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      const n = cp.CHORD_PROGRESSIONS.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
+    getLoopIndex(angle) {
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'chords');
+      const n = indices.length;
+      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
     },
     getName(angle) {
-      const cp = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
-      const p = cp.CHORD_PROGRESSIONS[this.getProgIndex(angle)];
-      return p ? p.name : '';
+      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
+      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
+      return e ? e.name : '';
     },
   },
 

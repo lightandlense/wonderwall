@@ -18,7 +18,7 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[3].subtype, 'reverb');
   assert.strictEqual(MODULE_REGISTRY[4].type, 'sampler');   // Drummer is now a loop sampler
   assert.strictEqual(MODULE_REGISTRY[5].subtype, 'tonality');
-  assert.strictEqual(MODULE_REGISTRY[6].type, 'chords');
+  assert.strictEqual(MODULE_REGISTRY[6].type, 'sampler');
   assert.strictEqual(MODULE_REGISTRY[7].type, 'sampler');   // Melody
   assert.strictEqual(MODULE_REGISTRY[8].subtype, 'tempo');
   assert.strictEqual(MODULE_REGISTRY[9].subtype, 'distortion');
@@ -61,6 +61,19 @@ test('Drummer (id 4): is a sampler that only selects drum-category loops', () =>
   assert.strictEqual(lb.LOOP_BANK[drum.getLoopIndex(3 * Math.PI / 2)].name, 'Ring');
   assert.strictEqual(lb.LOOP_BANK[drum.getLoopIndex(Math.PI / 4)].name, 'Drums');
   assert.ok(typeof drum.getName(0) === 'string' && drum.getName(0).length > 0);
+});
+
+test('Chords (id 6): is a sampler that only selects chord-category loops', () => {
+  const ch = MODULE_REGISTRY[6];
+  const lb = require('../data/loopBank.js');
+  assert.strictEqual(ch.type, 'sampler');
+  for (const angle of [3 * Math.PI / 2, 0, Math.PI / 8, Math.PI / 4]) {
+    const idx = ch.getLoopIndex(angle);
+    assert.strictEqual(lb.LOOP_BANK[idx].category, 'chords', `angle ${angle} -> non-chord`);
+  }
+  assert.strictEqual(lb.LOOP_BANK[ch.getLoopIndex(3 * Math.PI / 2)].name, 'Phrog');
+  assert.strictEqual(lb.LOOP_BANK[ch.getLoopIndex(Math.PI / 4)].name, 'Epic Synth');
+  assert.ok(typeof ch.getName(0) === 'string' && ch.getName(0).length > 0);
 });
 
 test('Tempo (id 8): rotation maps to 70..160 BPM', () => {
