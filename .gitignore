@@ -1,0 +1,6 @@
+# Source loop masters — large, untracked. The app plays the pre-baked 128 BPM
+# versions under loops/_128/ (which ARE committed). Regenerate _128 from these
+# with: node scripts/convert-loops-128.mjs
+loops/Melody/
+loops/drummer/
+loops/Chords/
