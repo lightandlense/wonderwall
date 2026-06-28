@@ -17,7 +17,6 @@ const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonali
 const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-const _drumGrooves = (typeof require === 'function') ? require('../data/drumGrooves.js') : window.drumGrooves;
 const _bassLines = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
 const _chordProgs = (typeof require === 'function') ? require('../data/chordProgressions.js') : window.chordProgressions;
 const _melodyLines = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
@@ -28,15 +27,6 @@ const DEFAULT_ROOT = 0;          // C, when no Tonality puck is present
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
 
-// Build the three drum voices for a Drummer puck, mixed into one output node.
-function _makeDrums() {
-  const out = new Tone.Gain();
-  const kick = new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.05, envelope: { attack: 0.001, decay: 0.4, sustain: 0 } });
-  const snare = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 }, volume: -6 });
-  const hat = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.06, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 6000, octaves: 1.5, volume: -18 });
-  kick.connect(out); snare.connect(out); hat.connect(out);
-  return { out, kick, snare, hat };
-}
 
 // Sequencer clock state
 let _step = 0;             // current 16th-note step (0..STEPS-1)
@@ -108,18 +98,11 @@ function _onStep(time) {
   _step = (_step + 1) % _rhythm.STEPS;
 
   // --- Cross-modulation: gather this-step intent for all band pucks ---
-  let _xm_kickFired = false, _xm_snareFired = false;
   let _xm_chordDeg = null, _xm_bassDeg = null, _xm_melodyDeg = null;
   let _xm_bassStepCount = 0;
 
   Object.values(activeModules).forEach(m => {
-    if (m.def.type === 'drummer') {
-      const groove = _drumGrooves.DRUM_GROOVES[m.presetIdx];
-      if (groove) {
-        if (groove.kick[_step]) _xm_kickFired = true;
-        if (groove.snare[_step]) _xm_snareFired = true;
-      }
-    } else if (m.def.type === 'bass') {
+    if (m.def.type === 'bass') {
       const line = _bassLines.BASS_LINES[m.presetIdx];
       const d = line && line.steps[_step];
       if (d != null) _xm_bassDeg = d;
@@ -134,15 +117,6 @@ function _onStep(time) {
       if (d != null) _xm_melodyDeg = d;
     }
   });
-
-  // Chord-change detection for fill trigger (Chords → Drums: chord change = fill)
-  if (_xm_chordDeg !== null && _xm_chordDeg !== _modState.prevChordDeg) {
-    const depth = _modDepth('chords', 'drummer');
-    if (depth > 0) _modState.fillStepsRemaining = Math.round(4 * depth);
-    _modState.prevChordDeg = _xm_chordDeg;
-  }
-  if (_modState.fillStepsRemaining > 0) _modState.fillStepsRemaining--;
-  const _xm_inFill = _modState.fillStepsRemaining > 0;
 
   // Melody contour tracking (Melody → Bass)
   if (_xm_melodyDeg != null) {
@@ -178,30 +152,6 @@ function _onStep(time) {
     try { tgt.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
   });
 
-  // Drummer pucks play their own groove on every step (self-contained drum machine).
-  Object.keys(activeModules).forEach(idStr => {
-    const m = activeModules[idStr];
-    if (!m || m.def.type !== 'drummer' || !m.drums) return;
-    const groove = _drumGrooves.DRUM_GROOVES[m.presetIdx];
-    if (!groove) return;
-    if (groove.kick[_step])  { try { m.drums.kick.triggerAttackRelease('C1', '8n', time); } catch (_) {} }
-
-    // Snare: normal groove + fill injection (Chords → Drums: chord change = fill)
-    const snareHit = groove.snare[_step] || (_xm_inFill && _step % 4 === 2);
-    if (snareHit) { try { m.drums.snare.triggerAttackRelease('16n', time); } catch (_) {} }
-
-    // Hat: normal groove
-    //   + melody-driven hat (Melody → Drums: each melody note gates a hat)
-    //   + bass-density hat (Bass → Drums: busy bass adds extra hat probability)
-    const extraHatChance = _modDepth('bass', 'drummer') * (_xm_bassStepCount / 16);
-    const hatFromBass = Math.random() < extraHatChance;
-    const hatFromMelody = _modDepth('lead', 'drummer') > 0 && _xm_melodyDeg != null;
-
-    if (groove.hat[_step] || hatFromMelody || hatFromBass) {
-      try { m.drums.hat.triggerAttackRelease('32n', time); } catch (_) {}
-    }
-  });
-
   // Bass + Chords pucks: self-play their selected preset each step, voiced in the Tonality key.
   const _root = (_tonality && _tonality.active) ? _tonality.root : DEFAULT_ROOT;
   Object.keys(activeModules).forEach(idStr => {
@@ -222,24 +172,15 @@ function _onStep(time) {
       const octShift = (_modDepth('lead', 'bass') > 0.5 && _xm_melodyAscending
         && _modState.melodyHistory.length >= 2) ? 7 : 0;
 
-      // Drums → Bass: velocity boost on kick steps (lower on non-kick steps)
-      const dDepth = _modDepth('drummer', 'bass');
-      const vel = dDepth > 0 ? (_xm_kickFired ? 1.0 : Math.max(0.3, 1.0 - dDepth * 0.6)) : 1;
-
       try { m.node.triggerAttackRelease(
         _tonalityUtil.scaleDegreeFreq(BASS_BASE_FREQ, _root, deg + octShift),
-        '8n', time, vel,
+        '8n', time,
       ); } catch (_) {}
 
     } else if (m.def.type === 'chords') {
       const prog = _chordProgs.CHORD_PROGRESSIONS[m.presetIdx];
       let d = prog && prog.steps[_step];
 
-      // Drums → Chords: retrigger current chord on snare steps (even if not a chord step)
-      if (d == null && _modDepth('drummer', 'chords') > 0 && _xm_snareFired
-          && _modState.prevChordDeg != null) {
-        d = _modState.prevChordDeg;
-      }
       if (d == null) return;
 
       // Bass → Chords: bass rotation spreads the top chord note upward
@@ -268,10 +209,6 @@ function _onStep(time) {
       const mel = _melodyLines.MELODY_LINES[m.presetIdx];
       let deg = mel && mel.steps[_step];
       if (deg == null) return;
-
-      // Drums → Melody: kick gates melody — skip this step if kick didn't fire
-      if (_modDepth('drummer', 'lead') > 0 && !_xm_kickFired
-          && Math.random() < _modDepth('drummer', 'lead')) return;
 
       // Bass → Melody: bass root pulls melody toward unison (one octave above bass)
       if (_modDepth('bass', 'lead') > 0 && _xm_bassDeg != null
@@ -326,7 +263,6 @@ function _addModule(id, marker) {
   let node = null;
   let meter = null;
   let loopIdx = -1;
-  let drums = null;
   let presetIdx = 0;
 
   if (def.type === 'oscillator') {
@@ -369,12 +305,6 @@ function _addModule(id, marker) {
     } else {
       console.warn('[audio] Loop puck: no buffer for', entry && entry.file, '— serve over http (npm start) so loops can load.');
     }
-  } else if (def.type === 'drummer') {
-    presetIdx = def.getGrooveIndex(smoother.get());
-    drums = _makeDrums();           // kick/snare/hat -> drums.out; _onStep triggers them
-    node = drums.out;               // routing connects this to the center master
-    meter = new Tone.Meter({ smoothing: 0.8 });
-    node.connect(meter);
   } else if (def.type === 'bass') {
     presetIdx = def.getLineIndex(smoother.get());
     node = new Tone.MonoSynth({
@@ -415,7 +345,6 @@ function _addModule(id, marker) {
     node,
     meter,
     loopIdx,
-    drums,
     presetIdx,
     smoother,
     missCount: 0,
@@ -430,7 +359,6 @@ function _removeModule(id) {
   if (!m) return;
 
   if (m.meter) { try { m.meter.dispose(); } catch (_) {} }
-  if (m.drums) { ['kick', 'snare', 'hat', 'out'].forEach(k => { try { m.drums[k].dispose(); } catch (_) {} }); }
 
   if (m.def.type === 'oscillator' && m.node) {
     m.node.triggerRelease();
@@ -470,8 +398,6 @@ function _updateModule(id, marker) {
       const entry = _loopBank.LOOP_BANK[m.loopIdx];
       if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
     }
-  } else if (m.def.type === 'drummer') {
-    m.presetIdx = m.def.getGrooveIndex(angle);   // rotation picks the groove; _onStep reads it
   } else if (m.def.type === 'bass') {
     m.presetIdx = m.def.getLineIndex(angle);
   } else if (m.def.type === 'chords') {
@@ -564,7 +490,6 @@ let _lastModTime = null;   // performance.now() of the last modulation tick
 let _modulations = new Map();          // set each detection frame by setModulations()
 const _modState = {
   prevChordDeg: null,                  // tracks chord changes for fill triggering
-  fillStepsRemaining: 0,               // countdown: how many steps the fill lasts
   melodyHistory: [],                   // last 3 melody degrees for contour detection
 };
 
