@@ -14,17 +14,20 @@ function _arcT(angle) {
 // Exponential map helper for [0,1] -> [lo,hi].
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
-// Bit-crush WaveShaper curve: quantize [-1,1] to 2^bits levels. A plain WaveShaper
-// (native node) replaces Tone v15's AudioWorklet BitCrusher, which didn't process audio.
-function _crushCurve(bits) {
-  const steps = Math.pow(2, Math.max(1, bits));
-  const n = 1024;
-  const curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;                                   // -1..1
-    curve[i] = Math.round(((x + 1) / 2) * (steps - 1)) / (steps - 1) * 2 - 1;
-  }
-  return curve;
+// Shared loop-selection for sampler pucks: pick within a category AND the active group.
+function _lb() { return (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank; }
+function _samplerLoopIndex(category, angle) {
+  const lb = _lb();
+  const indices = lb.LOOP_BANK.map((e, i) => i)
+    .filter(i => lb.LOOP_BANK[i].category === category && lb.LOOP_BANK[i].group === lb.activeGroup);
+  if (indices.length === 0) return -1;
+  const t = _arcT(angle);
+  return indices[Math.max(0, Math.min(indices.length - 1, Math.floor(t * indices.length)))];
+}
+function _samplerName(category, angle) {
+  const lb = _lb();
+  const i = _samplerLoopIndex(category, angle);
+  return (i >= 0 && lb.LOOP_BANK[i]) ? lb.LOOP_BANK[i].name : '';
 }
 
 const MODULE_REGISTRY = {
@@ -69,17 +72,8 @@ const MODULE_REGISTRY = {
   4: {
     id: 4, name: 'Drummer', type: 'sampler', color: '#ff6b6b', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'drums');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('drums', angle); },
+    getName(angle) { return _samplerName('drums', angle); },
   },
 
   // ID 5: Volume — fades the nearest sound puck. 0 = silent, center = unity (0 dB), full = +6 dB.
@@ -96,36 +90,16 @@ const MODULE_REGISTRY = {
   6: {
     id: 6, name: 'Chords', type: 'sampler', color: '#ffaa44', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'chords');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const e = lb.LOOP_BANK[this.getLoopIndex(angle)];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('chords', angle); },
+    getName(angle) { return _samplerName('chords', angle); },
   },
 
   // ID 7: Melody — rotation selects a Cymatics melody loop
   7: {
     id: 7, name: 'Melody', type: 'sampler', color: '#ff44ff', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLoopIndex(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const indices = lb.LOOP_BANK.map((e, i) => i).filter(i => lb.LOOP_BANK[i].category === 'melody');
-      const n = indices.length;
-      return indices[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-      const melody = lb.LOOP_BANK.filter(e => e.category === 'melody');
-      const n = melody.length;
-      const e = melody[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-      return e ? e.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('melody', angle); },
+    getName(angle) { return _samplerName('melody', angle); },
   },
 
   // ID 8: Tempo — global; rotation sets the Transport BPM (70..160)
@@ -155,14 +129,22 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.frequency.rampTo(1 + t * 11, 0.05); },
   },
 
-  // ID 15: BitCrusher — rotation controls bit depth (8 = clean, 1 = maximum crunch)
+  // ID 15: Loop Bank — global; rotation selects the active loop group (OG / Futurebass).
+  // Reassigned from marker 12: that marker's all-black top row merged with the printed
+  // border and wouldn't detect (same defect that retired 12 from calibration — see
+  // calibration.js). Marker 15 has clean borders, so the puck is reliably picked up.
   15: {
-    id: 15, name: 'Crusher', type: 'effect', subtype: 'bitcrusher', color: '#cc44ff',
-    paramLabel: 'Crush',
+    id: 15, name: 'Loop Bank', type: 'global', subtype: 'loopgroup', color: '#aa88ff', paramLabel: 'Bank',
     getParamT(angle) { return _arcT(angle); },
-    centerValue(t) { return Math.round(8 - t * 7); }, // 8..1 bits
-    makeNode() { const ws = new Tone.WaveShaper(); ws.curve = _crushCurve(this.centerValue(0)); return ws; },
-    applyParam(node, t) { node.curve = _crushCurve(this.centerValue(t)); },
+    getGroup(angle) {
+      const lb = _lb();
+      const n = lb.GROUPS.length;
+      return lb.GROUPS[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
+    },
+    getName(angle) {
+      const lb = _lb();
+      return lb.GROUP_LABELS[this.getGroup(angle)] || this.getGroup(angle);
+    },
   },
 
   // ID 20: Loop — rotation selects a loop from the loop bank
@@ -181,20 +163,12 @@ const MODULE_REGISTRY = {
     },
   },
 
-  // ID 16: Bass — rotation selects EDM bassline preset
+  // ID 16: Bass — rotation selects a bass loop (category 'bass', all D# Minor)
   16: {
-    id: 16, name: 'Bass', type: 'bass', color: '#44ff99', paramLabel: 'Line',
+    id: 16, name: 'Bass', type: 'sampler', color: '#44ff99', paramLabel: 'Loop',
     getParamT(angle) { return _arcT(angle); },
-    getLineIndex(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      const n = bl.BASS_LINES.length;
-      return Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)));
-    },
-    getName(angle) {
-      const bl = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-      const l = bl.BASS_LINES[this.getLineIndex(angle)];
-      return l ? l.name : '';
-    },
+    getLoopIndex(angle) { return _samplerLoopIndex('bass', angle); },
+    getName(angle) { return _samplerName('bass', angle); },
   },
 
 };

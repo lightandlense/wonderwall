@@ -14,24 +14,10 @@ let audioInitialized = false;
 // Global tonality state, set by applyRoutingPlan from the routing plan.
 let _tonality = null; // { active, root, scale } | null
 const _tonalityUtil = (typeof require === 'function') ? require('../utils/tonality.js') : window.tonality;
-const _rhythm = (typeof require === 'function') ? require('../utils/rhythmPatterns.js') : window.rhythmPatterns;
 const _cableAnim = (typeof require === 'function') ? require('../utils/cableAnim.js') : window.cableAnim;
 const _loopBank = (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank;
-const _bassLines = (typeof require === 'function') ? require('../data/bassLines.js') : window.bassLines;
-const _melodyLines = (typeof require === 'function') ? require('../data/melodyLines.js') : window.melodyLines;
-const BASS_BASE_FREQ = 65.41;    // C2 anchor for the bass register
-const LEAD_BASE_FREQ = 523.25;   // C5 anchor for the lead (sits above bass + pad)
-const DEFAULT_ROOT = 3;          // D#, matches the D# Minor loops (when no Tonality puck is present)
 const LOOP_BUFFERS = {};   // file -> Tone.ToneAudioBuffer
 const LOOP_PEAKS = {};     // file -> number[] peak envelope
-
-
-// Sequencer clock state
-let _step = 0;             // current 16th-note step (0..STEPS-1)
-let _stepLoop = null;      // Tone.Loop instance
-let _seqIndex = {};        // sequencerId -> melodic-walk counter
-let _sequencedOscs = new Set(); // oscillator ids currently gated by a sequencer
-let _seqPulses = {};       // sequencerId -> performance.now() of last hit (for cable animation)
 
 // Oscillator frequency with optional scale quantization.
 function _oscFreq(def, angle) {
@@ -39,9 +25,6 @@ function _oscFreq(def, angle) {
   if (_tonality && _tonality.active) return _tonalityUtil.quantizeFreqToScale(f, _tonality.root);
   return f;
 }
-
-// Set of module ids currently driven by an LFO (skip direct param ramp for them).
-let _lfoTargets = new Set();
 
 // Always-on central master output (the wall-center hub). Created in initAudio,
 // always wired to the speaker; every chain terminates here.
@@ -54,8 +37,6 @@ async function initAudio() {
   await preloadLoops();                         // decode loop buffers + peak envelopes
   master = new Tone.Volume(-6).toDestination(); // DEFAULT_DB
   Tone.Transport.bpm.value = 128;               // BPM — EDM default
-  _step = 0;
-  _stepLoop = new Tone.Loop((time) => { _onStep(time); }, '16n').start(0);
   Tone.Transport.start();
   audioInitialized = true;
   console.log('[audio] AudioContext started');
@@ -90,100 +71,6 @@ async function preloadLoops() {
   });
 }
 
-// Fired once per 16th note by the Transport loop: each active sequencer fires
-// its target on hit steps — pulses an oscillator, or stutter-retriggers a loop.
-function _onStep(time) {
-  _step = (_step + 1) % _rhythm.STEPS;
-
-  // --- Cross-modulation: gather this-step intent for all band pucks ---
-  let _xm_bassDeg = null, _xm_melodyDeg = null;
-
-  Object.values(activeModules).forEach(m => {
-    if (m.def.type === 'bass') {
-      const line = _bassLines.BASS_LINES[m.presetIdx];
-      const d = line && line.steps[_step];
-      if (d != null) _xm_bassDeg = d;
-    } else if (m.def.type === 'lead') {
-      const mel = _melodyLines.MELODY_LINES[m.presetIdx];
-      const d = mel && mel.steps[_step];
-      if (d != null) _xm_melodyDeg = d;
-    }
-  });
-
-  // Melody contour tracking (Melody → Bass)
-  if (_xm_melodyDeg != null) {
-    _modState.melodyHistory.push(_xm_melodyDeg);
-    if (_modState.melodyHistory.length > 3) _modState.melodyHistory.shift();
-  }
-  const _xm_melodyAscending = _modState.melodyHistory.length >= 2
-    && _modState.melodyHistory[_modState.melodyHistory.length - 1] > _modState.melodyHistory[0];
-
-  Object.keys(_activeLinks).forEach(cidStr => {
-    const cid = Number(cidStr);
-    const ctrl = activeModules[cid];
-    if (!ctrl || ctrl.def.subtype !== 'sequencer') return;
-    const tgt = activeModules[_activeLinks[cid]];
-    if (!tgt || !tgt.node) return;
-    const pat = _rhythm.PATTERNS[ctrl.def.getPatternIndex(ctrl.smoother.get())];
-    if (!pat || !pat.steps[_step]) return;
-    _seqPulses[cid] = (typeof performance !== 'undefined') ? performance.now() : 0; // for cable pulse anim
-
-    if (tgt.def.type === 'sampler') {
-      try { tgt.node.restart(time); } catch (_) {}   // stutter: retrigger the loop from the start
-      return;
-    }
-    if (tgt.def.type !== 'oscillator') return;
-    let freq;
-    if (_tonality && _tonality.active) {
-      const idx = (_seqIndex[cid] || 0);
-      freq = _tonalityUtil.scaleDegreeFreq(tgt.def.getFreq(tgt.smoother.get()), _tonality.root, idx);
-      _seqIndex[cid] = idx + 1;
-    } else {
-      freq = _oscFreq(tgt.def, tgt.smoother.get());
-    }
-    try { tgt.node.triggerAttackRelease(freq, '16n', time); } catch (_) {}
-  });
-
-  // Bass + Lead pucks: self-play their selected preset each step, voiced in the Tonality key.
-  const _root = (_tonality && _tonality.active) ? _tonality.root : DEFAULT_ROOT;
-  Object.keys(activeModules).forEach(idStr => {
-    const m = activeModules[idStr];
-    if (!m || !m.node) return;
-    if (m.def.type === 'bass') {
-      const line = _bassLines.BASS_LINES[m.presetIdx];
-      let deg = line && line.steps[_step];
-      if (deg == null) return;
-
-      // Melody → Bass: ascending melody lifts bass an octave
-      const octShift = (_modDepth('lead', 'bass') > 0.5 && _xm_melodyAscending
-        && _modState.melodyHistory.length >= 2) ? 7 : 0;
-
-      try { m.node.triggerAttackRelease(
-        _tonalityUtil.scaleDegreeFreq(BASS_BASE_FREQ, _root, deg + octShift),
-        '8n', time,
-      ); } catch (_) {}
-
-    } else if (m.def.type === 'lead') {
-      const mel = _melodyLines.MELODY_LINES[m.presetIdx];
-      let deg = mel && mel.steps[_step];
-      if (deg == null) return;
-
-      // Bass → Melody: bass root pulls melody toward unison (one octave above bass)
-      if (_modDepth('bass', 'lead') > 0 && _xm_bassDeg != null
-          && Math.random() < _modDepth('bass', 'lead')) {
-        deg = _xm_bassDeg + 7; // same scale degree, one octave up
-      }
-
-      try { m.node.triggerAttackRelease(
-        _tonalityUtil.scaleDegreeFreq(LEAD_BASE_FREQ, _root, deg), '8n', time
-      ); } catch (_) {}
-    }
-  });
-}
-
-function getSeqStep() { return _step; }
-function getSeqPulses() { return _seqPulses; }
-
 // Live output level [0,1] for a module's ring pulse + waveform amplitude (0 if no meter).
 function getModuleLevel(id) {
   const m = activeModules[id];
@@ -193,15 +80,6 @@ function getModuleLevel(id) {
   if (Array.isArray(db)) db = db[0];      // stereo meter -> use first channel
   return _cableAnim.meterToUnit(db);
 }
-// LFO modulation rate in Hz for a control cable's scroll speed (default 1).
-function getLfoRate(srcId) {
-  const m = activeModules[srcId];
-  if (m && m.def && typeof m.def.getRateHz === 'function') {
-    return m.def.getRateHz(m.smoother.get());
-  }
-  return 1;
-}
-
 function _addModule(id, marker) {
   const def = MODULE_REGISTRY[id];
   if (!def) return;
@@ -212,7 +90,6 @@ function _addModule(id, marker) {
   let node = null;
   let meter = null;
   let loopIdx = -1;
-  let presetIdx = 0;
 
   if (def.type === 'oscillator') {
     // Sawtooth (harmonically rich) so the low-pass Filter and Delay are clearly
@@ -235,7 +112,7 @@ function _addModule(id, marker) {
   } else if (def.type === 'sampler') {
     loopIdx = def.getLoopIndex(smoother.get());
     const entry = _loopBank.LOOP_BANK[loopIdx];
-    const buf = LOOP_BUFFERS[entry.file];
+    const buf = entry && LOOP_BUFFERS[entry.file];
     console.log('[sampler] add id', id, 'loopIdx', loopIdx, 'file', entry && entry.file, 'buf?', !!buf, 'bufLoaded?', buf && buf.loaded, 'master?', !!master);
     if (buf) {
       try {
@@ -258,28 +135,6 @@ function _addModule(id, marker) {
     } else {
       console.warn('[audio] Loop puck: no buffer for', entry && entry.file, '— serve over http (npm start) so loops can load.');
     }
-  } else if (def.type === 'bass') {
-    presetIdx = def.getLineIndex(smoother.get());
-    node = new Tone.MonoSynth({
-      oscillator: { type: 'sawtooth' },
-      filter: { type: 'lowpass', Q: 2 },
-      envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2 },
-      filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2, baseFrequency: 80, octaves: 2.6 },
-      volume: -10,
-    });
-    meter = new Tone.Meter({ smoothing: 0.8 });
-    node.connect(meter);
-  } else if (def.type === 'lead') {
-    presetIdx = def.getMelodyIndex(smoother.get());
-    node = new Tone.Synth({
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.005, decay: 0.12, sustain: 0.25, release: 0.18 },
-      volume: -16,
-    });
-    meter = new Tone.Meter({ smoothing: 0.8 });
-    node.connect(meter);
-  } else if (def.type === 'controller') {
-    node = null;                    // LFO + Sequencer are JS-driven, no audio node
   } else if (def.type === 'global') {
     node = null;                    // tonality / volume / tempo have no audio node
   }
@@ -289,7 +144,6 @@ function _addModule(id, marker) {
     node,
     meter,
     loopIdx,
-    presetIdx,
     smoother,
     missCount: 0,
     lastPos: { wx: marker.wx, wy: marker.wy },
@@ -330,28 +184,19 @@ function _updateModule(id, marker) {
   if (m.def.type === 'oscillator' && m.node) {
     // 50ms ramp — smooths pitch between detection frames without perceptible lag
     m.node.frequency.rampTo(_oscFreq(m.def, angle), 0.05);
-  } else if (m.def.type === 'effect' && m.node && !_lfoTargets.has(m.def.id)) {
-    // While an LFO drives this effect, its rotation feeds the LFO window instead
-    // (handled in applyRoutingPlan), so skip the direct ramp to avoid fighting it.
+  } else if (m.def.type === 'effect' && m.node) {
     m.def.applyParam(m.node, m.def.getParamT(angle));
   } else if (m.def.type === 'sampler' && m.node) {
     const idx = m.def.getLoopIndex(angle);
     if (idx !== m.loopIdx) { m.loopIdx = idx; _swapLoop(id, idx); }
-    // While an LFO drives this loop, it owns playbackRate (wobble) — don't fight it.
-    if (!_lfoTargets.has(m.def.id)) {
-      const entry = _loopBank.LOOP_BANK[m.loopIdx];
-      if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
-    }
-  } else if (m.def.type === 'bass') {
-    m.presetIdx = m.def.getLineIndex(angle);
-  } else if (m.def.type === 'lead') {
-    m.presetIdx = m.def.getMelodyIndex(angle);
+    const entry = _loopBank.LOOP_BANK[m.loopIdx];
+    if (entry) m.node.playbackRate = _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value);
   } else if (m.def.type === 'global' && m.def.subtype === 'tempo') {
     const bpm = m.def.getBpm(angle);
     Tone.Transport.bpm.rampTo(bpm, 0.1);
     _applyLoopRates(bpm);
-  } else if (m.def.type === 'controller' && m.node) {
-    m.node.frequency.rampTo(m.def.getRateHz(angle), 0.05);
+  } else if (m.def.type === 'global' && m.def.subtype === 'loopgroup') {
+    _loopBank.setActiveGroup(m.def.getGroup(angle));
   }
 }
 
@@ -426,66 +271,8 @@ function reconcileModules(markers) {
 }
 
 let _lastChainKeys = {};   // genId -> last applied "a>b>c" string
-let _activeLinks = {};     // lfoId -> targetId currently modulated
-let _lfoPhase = {};        // lfoId -> running phase (radians)
-let _lastModTime = null;   // performance.now() of the last modulation tick
 
-// Cross-modulation state (Phase 9)
-let _modulations = new Map();          // set each detection frame by setModulations()
-const _modState = {
-  melodyHistory: [],                   // last 3 melody degrees for contour detection
-};
-
-function setModulations(map) { _modulations = map || new Map(); }
-function _modDepth(src, dst) {
-  const m = _modulations.get(`${src}:${dst}`);
-  return m ? m.depth : 0;
-}
-
-// Apply one LFO's modulation to its target's parameter (JS-driven, option B:
-// the target's rotation sets the center; the LFO oscillates around it).
-function _applyLfoMod(lfoMod, tgt, s) {
-  const t = tgt.def.getParamT(tgt.smoother.get());
-  try {
-    if (tgt.def.type === 'oscillator') {
-      tgt.node.detune.rampTo(30 * s, 0.02);                          // +-30 cents vibrato
-    } else if (tgt.def.type === 'sampler') {
-      const entry = _loopBank.LOOP_BANK[tgt.loopIdx];
-      const base = entry ? _loopBank.playbackRateFor(entry.bpm, Tone.Transport.bpm.value) : 1;
-      tgt.node.playbackRate = base * Math.pow(2, 0.5 * s);           // +-half-octave speed/pitch wobble
-    } else if (tgt.def.subtype === 'filter') {
-      const c = tgt.def.centerValue(t);
-      tgt.node.frequency.rampTo(c * Math.pow(2, 0.5 * s), 0.02);     // +-half octave around cutoff
-    } else if (tgt.def.subtype === 'delay') {
-      const c = tgt.def.centerValue(t);
-      tgt.node.feedback.rampTo(Math.max(0, Math.min(0.85, c + 0.2 * s)), 0.02);
-    }
-  } catch (_) {}
-}
-
-// Call once per frame: advance each active LFO's phase and modulate its target.
-// Pure rampTo writes (bounded) — no audio-graph param connections, which is what
-// previously froze the WebAudio thread when an LFO was linked to a filter.
-function updateModulation() {
-  if (!audioInitialized) return;
-  const now = (typeof performance !== 'undefined') ? performance.now() : 0;
-  let dt = _lastModTime == null ? 0.016 : (now - _lastModTime) / 1000;
-  _lastModTime = now;
-  if (dt <= 0 || dt > 0.1) dt = 0.016; // guard first frame / tab-away pauses
-
-  Object.keys(_activeLinks).forEach(lfoIdStr => {
-    const lfoId = Number(lfoIdStr);
-    const lfoMod = activeModules[lfoId];
-    if (!lfoMod || lfoMod.def.subtype !== 'lfo') return; // sequencers handled by _onStep
-    const tgt = activeModules[_activeLinks[lfoId]];
-    if (!tgt || !tgt.node) return;
-    const rate = lfoMod.def.getRateHz(lfoMod.smoother.get());
-    _lfoPhase[lfoId] = ((_lfoPhase[lfoId] || 0) + 2 * Math.PI * rate * dt) % (2 * Math.PI);
-    _applyLfoMod(lfoMod, tgt, Math.sin(_lfoPhase[lfoId]));
-  });
-}
-
-// Execute a RoutingPlan: rewire only chains/links that changed; refresh LFO windows.
+// Execute a RoutingPlan: rewire only the audio chains that changed.
 function applyRoutingPlan(plan) {
   if (!audioInitialized) return;
   _tonality = plan.tonality;
@@ -522,58 +309,6 @@ function applyRoutingPlan(plan) {
     console.log(`[audio] chain ${chain.nodeIds.join('->')}`);
   });
   Object.keys(_lastChainKeys).forEach(g => { if (!seenGen.has(Number(g))) delete _lastChainKeys[g]; });
-
-  // ---- controller links (JS-driven; no audio-graph connections) ----
-  // Track which controller drives which target; _onStep / updateModulation act on it.
-  const desired = {}; plan.controlLinks.forEach(l => { desired[l.controllerId] = l.targetId; });
-
-  Object.keys(_activeLinks).forEach(cidStr => {
-    const cid = Number(cidStr);
-    if (desired[cid] !== _activeLinks[cid]) {
-      delete _activeLinks[cid]; delete _lfoPhase[cid]; delete _seqIndex[cid];
-    }
-  });
-  plan.controlLinks.forEach(l => {
-    const ctrl = activeModules[l.controllerId];
-    const tgt = activeModules[l.targetId];
-    if (!ctrl || !tgt || !tgt.node) return;
-    if (_activeLinks[l.controllerId] !== l.targetId) {
-      _activeLinks[l.controllerId] = l.targetId;
-      if (ctrl.def.subtype === 'lfo') _lfoPhase[l.controllerId] = 0;
-      if (ctrl.def.subtype === 'sequencer') _seqIndex[l.controllerId] = 0;
-      console.log(`[audio] ${ctrl.def.subtype} ${l.controllerId} -> module ${l.targetId}`);
-    }
-  });
-
-  // Recompute which oscillators are sequencer-gated and which modules an LFO drives.
-  const nowSeq = new Set(), nowLfo = new Set();
-  Object.keys(_activeLinks).forEach(cidStr => {
-    const ctrl = activeModules[Number(cidStr)];
-    if (!ctrl) return;
-    if (ctrl.def.subtype === 'sequencer') nowSeq.add(_activeLinks[Number(cidStr)]);
-    if (ctrl.def.subtype === 'lfo') nowLfo.add(_activeLinks[Number(cidStr)]);
-  });
-  // Gate transitions: newly sequenced target goes quiet (osc stops droning, loop stops
-  // free-running so _onStep can stutter it); un-sequenced resumes.
-  // Only oscillators are gated (drone off while sequenced). A sampler keeps its synced
-  // free-run playing — _onStep retriggers it in place (restart), the same call loop-swap
-  // uses successfully. Stopping it here is what made it go silent, so we don't.
-  nowSeq.forEach(tid => {
-    if (!_sequencedOscs.has(tid)) {
-      const m = activeModules[tid];
-      if (m && m.node && m.def.type === 'oscillator') { try { m.node.triggerRelease(); } catch (_) {} }
-    }
-  });
-  _sequencedOscs.forEach(tid => {
-    if (!nowSeq.has(tid)) {
-      const m = activeModules[tid];
-      if (m && m.node && m.def.type === 'oscillator') {
-        try { m.node.triggerAttack(_oscFreq(m.def, m.smoother.get())); } catch (_) {}
-      }
-    }
-  });
-  _sequencedOscs = nowSeq;
-  _lfoTargets = nowLfo;
 }
 
 // Returns smoothed angle [0, 2π) for a module, or null if not active.
@@ -598,10 +333,5 @@ window.reconcileModules   = reconcileModules;
 window.getModuleParam     = getModuleParam;
 window.getActiveModules   = getActiveModules;
 window.applyRoutingPlan   = applyRoutingPlan;
-window.updateModulation   = updateModulation;
-window.getSeqStep         = getSeqStep;
-window.getSeqPulses       = getSeqPulses;
 window.getModuleLevel     = getModuleLevel;
-window.getLfoRate         = getLfoRate;
-window.setModulations     = setModulations;
 window.getLoopPeaks       = getLoopPeaks;
