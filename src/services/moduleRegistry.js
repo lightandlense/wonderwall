@@ -14,19 +14,6 @@ function _arcT(angle) {
 // Exponential map helper for [0,1] -> [lo,hi].
 function _expMap(t, lo, hi) { return lo * Math.pow(hi / lo, t); }
 
-// Bit-crush WaveShaper curve: quantize [-1,1] to 2^bits levels. A plain WaveShaper
-// (native node) replaces Tone v15's AudioWorklet BitCrusher, which didn't process audio.
-function _crushCurve(bits) {
-  const steps = Math.pow(2, Math.max(1, bits));
-  const n = 1024;
-  const curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;                                   // -1..1
-    curve[i] = Math.round(((x + 1) / 2) * (steps - 1)) / (steps - 1) * 2 - 1;
-  }
-  return curve;
-}
-
 // Shared loop-selection for sampler pucks: pick within a category AND the active group.
 function _lb() { return (typeof require === 'function') ? require('../data/loopBank.js') : window.loopBank; }
 function _samplerLoopIndex(category, angle) {
@@ -132,21 +119,6 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.distortion = t * 0.9; },
   },
 
-  // ID 12: Loop Bank — global; rotation selects the active loop group (OG / Futurebass)
-  12: {
-    id: 12, name: 'Loop Bank', type: 'global', subtype: 'loopgroup', color: '#aa88ff', paramLabel: 'Bank',
-    getParamT(angle) { return _arcT(angle); },
-    getGroup(angle) {
-      const lb = _lb();
-      const n = lb.GROUPS.length;
-      return lb.GROUPS[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
-    },
-    getName(angle) {
-      const lb = _lb();
-      return lb.GROUP_LABELS[this.getGroup(angle)] || this.getGroup(angle);
-    },
-  },
-
   // ID 14: Tremolo — rotation controls rate (slow throb to rapid stutter)
   14: {
     id: 14, name: 'Tremolo', type: 'effect', subtype: 'tremolo', color: '#ffdd44',
@@ -157,14 +129,22 @@ const MODULE_REGISTRY = {
     applyParam(node, t) { node.frequency.rampTo(1 + t * 11, 0.05); },
   },
 
-  // ID 15: BitCrusher — rotation controls bit depth (8 = clean, 1 = maximum crunch)
+  // ID 15: Loop Bank — global; rotation selects the active loop group (OG / Futurebass).
+  // Reassigned from marker 12: that marker's all-black top row merged with the printed
+  // border and wouldn't detect (same defect that retired 12 from calibration — see
+  // calibration.js). Marker 15 has clean borders, so the puck is reliably picked up.
   15: {
-    id: 15, name: 'Crusher', type: 'effect', subtype: 'bitcrusher', color: '#cc44ff',
-    paramLabel: 'Crush',
+    id: 15, name: 'Loop Bank', type: 'global', subtype: 'loopgroup', color: '#aa88ff', paramLabel: 'Bank',
     getParamT(angle) { return _arcT(angle); },
-    centerValue(t) { return Math.round(8 - t * 7); }, // 8..1 bits
-    makeNode() { const ws = new Tone.WaveShaper(); ws.curve = _crushCurve(this.centerValue(0)); return ws; },
-    applyParam(node, t) { node.curve = _crushCurve(this.centerValue(t)); },
+    getGroup(angle) {
+      const lb = _lb();
+      const n = lb.GROUPS.length;
+      return lb.GROUPS[Math.max(0, Math.min(n - 1, Math.floor(_arcT(angle) * n)))];
+    },
+    getName(angle) {
+      const lb = _lb();
+      return lb.GROUP_LABELS[this.getGroup(angle)] || this.getGroup(angle);
+    },
   },
 
   // ID 20: Loop — rotation selects a loop from the loop bank

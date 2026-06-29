@@ -2,7 +2,7 @@
 // Curated loop bank. Pure data + rate math. Every loop is pre-baked to 128 BPM
 // (pitch preserved for tempo) by scripts/convert-loops-128.mjs. Each entry has a
 // `category` (drums/bass/chords/melody) AND a `group` (loop bank). The active group
-// is a global selected by the Loop Bank puck (id 12); sampler pucks pick a loop
+// is a global selected by the Loop Bank puck (id 15); sampler pucks pick a loop
 // matching their category AND loopBank.activeGroup. Melodic loops are D# Minor
 // (off-key sources pitch-shifted to a D# root during the bake); drums are keyless.
 const LOOP_BANK = [

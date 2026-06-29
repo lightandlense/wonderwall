@@ -221,13 +221,13 @@ test('Loop Bank puck sets the active group from rotation', async () => {
   };`, ctx);
   await vm.runInContext('initAudio()', ctx);
 
-  // Rotate the Loop Bank puck (id 12) to the top of the arc -> last group (futurebass).
-  const bank = { id: 12, wx: 600, wy: 600, angle: Math.PI / 4 };
+  // Rotate the Loop Bank puck (id 15) to the top of the arc -> last group (futurebass).
+  const bank = { id: 15, wx: 600, wy: 600, angle: Math.PI / 4 };
   for (let i = 0; i < 3; i++) ctx.onMarkersDetected([bank]);
   assert.strictEqual(vm.runInContext('window.loopBank.activeGroup', ctx), 'futurebass');
 
   // Rotate to the bottom of the arc -> first group (og).
-  const bankOg = { id: 12, wx: 600, wy: 600, angle: 3 * Math.PI / 2 };
+  const bankOg = { id: 15, wx: 600, wy: 600, angle: 3 * Math.PI / 2 };
   for (let i = 0; i < 3; i++) ctx.onMarkersDetected([bankOg]);
   assert.strictEqual(vm.runInContext('window.loopBank.activeGroup', ctx), 'og');
 });

@@ -24,8 +24,8 @@ test('registry has the modules with correct types', () => {
   assert.strictEqual(MODULE_REGISTRY[8].subtype, 'tempo');
   assert.strictEqual(MODULE_REGISTRY[9].subtype, 'distortion');
   assert.strictEqual(MODULE_REGISTRY[16].type, 'sampler');  // Bass is now a loop sampler
-  assert.strictEqual(MODULE_REGISTRY[12].type, 'global');      // Loop Bank switcher
-  assert.strictEqual(MODULE_REGISTRY[12].subtype, 'loopgroup');
+  assert.strictEqual(MODULE_REGISTRY[15].type, 'global');      // Loop Bank switcher (marker 15, reassigned from 12)
+  assert.strictEqual(MODULE_REGISTRY[15].subtype, 'loopgroup');
   assert.strictEqual(MODULE_REGISTRY[20].type, 'sampler');  // Loop
 });
 
@@ -103,8 +103,8 @@ test('Tempo (id 8): rotation maps to 70..160 BPM', () => {
   assert.strictEqual(tempo.getBpm(Math.PI / 4), 160);
 });
 
-test('Loop Bank (id 12): rotation maps arc to og / futurebass', () => {
-  const lbp = MODULE_REGISTRY[12];
+test('Loop Bank (id 15): rotation maps arc to og / futurebass', () => {
+  const lbp = MODULE_REGISTRY[15];
   assert.strictEqual(lbp.type, 'global');
   assert.strictEqual(lbp.getGroup(3 * Math.PI / 2), 'og');        // t=0 -> first group
   assert.strictEqual(lbp.getGroup(Math.PI / 4), 'futurebass');    // t=1 -> last group
